@@ -1,3 +1,24 @@
+## Lab
+### Lab1
+#### Exercise 1： Fields and Tuples
+schema: TupleDesc类 \
+schema包含多个TDItem（属性类型（Type），属性名） \
+Type：元组，包含INT_TYPE，STRING_TYPE \
+tuple: Tuple类 \
+tuple包含多个与schema对应的Field对象 \
+Field: 目前只实现了IntField、StringField与Type对应
+
+#### Exercise 2：Catalog
+Catalog: 记录了数据库中的表 \
+DbFile: 表对应的磁盘文件 \
+name：表名 \
+pkeyField：表主键 \
+可以用一个内部类Table封装这三个表的属性,并通过哈希表获取对应的表
+
+#### Exercise 3：BufferPool
+
+---
+
 course-info
 ===========
 

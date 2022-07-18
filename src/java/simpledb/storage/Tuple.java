@@ -15,7 +15,10 @@ public class Tuple implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    // 对应的schema
     private TupleDesc td;
+
+    // 一条记录的所有字段
     private Field[] fields;
 
     /**
