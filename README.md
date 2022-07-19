@@ -16,7 +16,33 @@ pkeyField：表主键 \
 可以用一个内部类Table封装这三个表的属性,并通过哈希表获取对应的表
 
 #### Exercise 3：BufferPool
+难点：如何找到pageId对应的页 \
+pid->tableId->dbFile->page
+```
+int pageTableId = pid.getTableId();
+DbFile dbFile = Database.getCatalog().getDatabaseFile(pageTableId);
+Page page = dbFile.readPage(pid);
+```
+各个类的包含关系：
+DataBase->(BufferPool, Catalog) \
+BufferPool->page（缓存页） \
+Catalog->Table（内部类，包含表的信息：表的数据库文件，表名，主键）->(DbFile, name, pKeyField) \
+DbFile(物理意义上的一张表)->Page（磁盘页） \
+Page->Tuple (一个页可以存储多条记录)
 
+#### Exercise 4：HeapFile access method
+HeapPage：包含headers（bitmap）和tuples（tuple数组）\
+**难点：**\
+(1) 大端模式下的header字节数组（bitmap）中的bit和tuple的对应关系 \
+    header（大端模式）：7 6 5 4 3 2 1 0 | 15 14 13 12 11 10 9 8 | ... \
+(2) 如何利用位运算计算 \
+(2.1) 某一个slot的状态（1：有效，0：无效（被删除、没有初始化（header要保证一个完整的字节，所以最后的bit可能没有对应的slot））） \
+    isSlotUsed \
+(2.2) 被删除的slot的个数 \
+    getNumEmptySlots \
+(3) 针对header实现迭代器 \
+需要跳过被删除的slot
+ 
 ---
 
 course-info

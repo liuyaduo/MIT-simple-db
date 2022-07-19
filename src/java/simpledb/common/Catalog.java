@@ -164,6 +164,9 @@ public class Catalog {
     
     /**
      * Reads the schema from a file and creates the appropriate tables in the database.
+     * catalogFile文件格式
+     * name1 (属性名 类型  pk(可选，表示该属性为主键), ...)
+     * name2 (属性名 类型, ...)
      * @param catalogFile
      */
     public void loadSchema(String catalogFile) {

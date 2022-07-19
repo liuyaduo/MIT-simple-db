@@ -4,7 +4,6 @@
 
 **Due: Wed, Mar 10 11:59 PM EDT**
 
-
 <!--
 **Bug Update:** We have a [page](bugs.html) to keep track
 of SimpleDB bugs that you or we find. Fixes for bugs/annoyances will also be
@@ -42,7 +41,6 @@ yourself or send us a friendly email.  We promise to help out by posting
 bug fixes, new commits to the HW repo, etc., as bugs and issues are reported.
 
 <p>...and if you find a bug in our code, we`ll give you a candy bar (see [Section 3.3](#bugs))!
-
 -->
 <!--which you can find [here](bugs.html).</p>-->
 
@@ -349,7 +347,6 @@ does not have:
 * (In this lab) Indices.
 
 <p>
-
 In the rest of this Section, we describe each of the main components of SimpleDB that you will need to implement in this
 lab. You should use the exercises in this discussion to guide your implementation. This document is by no means a
 complete specification for SimpleDB; you will need to make decisions about how to design and implement various parts of
@@ -373,13 +370,13 @@ file as you will need to access these objects.
 ### Exercise 1
 
 **Implement the skeleton methods in:**
+
 ***
 
 * src/java/simpledb/storage/TupleDesc.java
 * src/java/simpledb/storage/Tuple.java
 
 ***
-
 
 At this point, your code should pass the unit tests TupleTest and TupleDescTest. At this point, modifyRecordId() should
 fail because you havn't implemented it yet.
@@ -402,7 +399,7 @@ using `Database.getBufferPool()`).
 
 * src/java/simpledb/common/Catalog.java
 
-*** 
+***
 
 At this point, your code should pass the unit tests in CatalogTest.
 
@@ -542,7 +539,7 @@ disk.
 
 * src/java/simpledb/storage/HeapFile.java
 
-*** 
+***
 
 To read a page from disk, you will first need to calculate the correct offset in the file. Hint: you will need random
 access to the file in order to read and write pages at arbitrary offsets. You should not call BufferPool methods when
