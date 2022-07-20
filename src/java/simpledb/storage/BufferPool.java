@@ -1,14 +1,13 @@
 package simpledb.storage;
 
-import simpledb.common.Database;
-import simpledb.common.Permissions;
-import simpledb.common.DbException;
-import simpledb.common.DeadlockException;
+import simpledb.common.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -33,6 +32,15 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    // BufferPool缓存页的最大数量
+    private int maxNumPages;
+
+    // BufferPool已缓存页的数量
+    private int pagesNum;
+
+    // 缓存
+    private Map<PageId, Page> cache;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +48,9 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.pagesNum = 0;
+        this.maxNumPages = numPages;
+        cache = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -71,10 +82,25 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        if (!cache.containsKey(pid)) {
+            if (pagesNum == maxNumPages) {
+                // TODO
+                throw new DbException("尚未实现替换策略！");
+            }
+            // 读取pid对应的page
+            int pageTableId = pid.getTableId();
+            DbFile dbFile = Database.getCatalog().getDatabaseFile(pageTableId);
+            Page page = dbFile.readPage(pid);
+
+            // 将page加入缓存
+            cache.put(pid, page);
+            pagesNum++;
+        }
+
+        return cache.get(pid);
     }
 
     /**

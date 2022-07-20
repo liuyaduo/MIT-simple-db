@@ -8,6 +8,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
+import java.nio.Buffer;
 import java.util.*;
 
 /**
@@ -22,6 +23,12 @@ import java.util.*;
  */
 public class HeapFile implements DbFile {
 
+    private final File file;
+
+    private final TupleDesc td;
+
+    private final int pageNum;
+
     /**
      * Constructs a heap file backed by the specified file.
      * 
@@ -31,6 +38,9 @@ public class HeapFile implements DbFile {
      */
     public HeapFile(File f, TupleDesc td) {
         // some code goes here
+        this.file = f;
+        this.td = td;
+        this.pageNum = numPages();
     }
 
     /**
@@ -40,7 +50,7 @@ public class HeapFile implements DbFile {
      */
     public File getFile() {
         // some code goes here
-        return null;
+        return this.file;
     }
 
     /**
@@ -54,7 +64,7 @@ public class HeapFile implements DbFile {
      */
     public int getId() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return this.file.getAbsoluteFile().hashCode();
     }
 
     /**
@@ -64,12 +74,29 @@ public class HeapFile implements DbFile {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return this.td;
     }
 
     // see DbFile.java for javadocs
     public Page readPage(PageId pid) {
         // some code goes here
+        if (pid.getPageNumber() >= this.pageNum) {
+            throw new IllegalArgumentException("PageId的页号太大！");
+        }
+        // 要读取的页号
+        int pgNo = pid.getPageNumber();
+        try (
+                RandomAccessFile r = new RandomAccessFile(this.file, "r");
+        ) {
+            byte[] bytes = new byte[BufferPool.getPageSize()];
+            // 定位到读取的页的位置
+            r.seek(pgNo * BufferPool.getPageSize());
+            r.read(bytes, 0, BufferPool.getPageSize());
+            HeapPageId pageId = new HeapPageId(getId(), pgNo);
+            return new HeapPage(pageId, bytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
@@ -84,7 +111,7 @@ public class HeapFile implements DbFile {
      */
     public int numPages() {
         // some code goes here
-        return 0;
+        return (int) Math.floor(this.file.length() / (float) BufferPool.getPageSize());
     }
 
     // see DbFile.java for javadocs
@@ -103,10 +130,65 @@ public class HeapFile implements DbFile {
         // not necessary for lab1
     }
 
+    /**
+     * 迭代器，用来遍历HeapFile中的tuple
+     */
+    private class HeapFileIterator implements DbFileIterator {
+
+        private TransactionId tid;
+        private Iterator<Tuple>[] pageIterator;
+        private int pgCursor;
+
+        HeapFileIterator(TransactionId tid) {
+            this.tid = tid;
+            pageIterator = new Iterator[pageNum];
+        }
+
+        @Override
+        public void open() throws DbException, TransactionAbortedException {
+            for (int pgNo = 0; pgNo < pageNum; pgNo++) {
+                PageId pageId = new HeapPageId(getId(), pgNo);
+                HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
+                Iterator<Tuple> iterator = page.iterator();
+                pageIterator[pgNo] = iterator;
+            }
+        }
+
+        @Override
+        public boolean hasNext() throws DbException, TransactionAbortedException {
+            return this.pgCursor < pageNum && pageIterator[this.pgCursor] != null && pageIterator[this.pgCursor].hasNext();
+        }
+
+        @Override
+        public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+
+            Tuple tuple = pageIterator[pgCursor].next();
+            // 当前页遍历完，切换到下一页
+            if (!pageIterator[pgCursor].hasNext()) {
+                pgCursor ++;
+            }
+            return tuple;
+        }
+
+        @Override
+        public void rewind() throws DbException, TransactionAbortedException {
+            pgCursor = 0;
+            open();
+        }
+
+        @Override
+        public void close() {
+            Arrays.fill(pageIterator, null);
+        }
+    }
+
     // see DbFile.java for javadocs
     public DbFileIterator iterator(TransactionId tid) {
         // some code goes here
-        return null;
+        return new HeapFileIterator(tid);
     }
 
 }
