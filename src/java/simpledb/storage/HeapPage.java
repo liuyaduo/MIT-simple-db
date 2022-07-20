@@ -356,15 +356,14 @@ public class HeapPage implements Page {
         @Override
         public Tuple next() {
             int i = cursor;
-            if (i >= numSlots) {
-                throw new NoSuchElementException("");
-            }
-
             while (i < numSlots) {
                 if (isSlotUsed(i)) {
                     break;
                 }
                 i++;
+            }
+            if (i >= numSlots) {
+                throw new NoSuchElementException("");
             }
             cursor = i + 1;
             return tuples[i];

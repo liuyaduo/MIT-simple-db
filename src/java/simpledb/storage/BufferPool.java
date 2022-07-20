@@ -97,6 +97,7 @@ public class BufferPool {
 
             // 将page加入缓存
             cache.put(pid, page);
+            pagesNum++;
         }
 
         return cache.get(pid);

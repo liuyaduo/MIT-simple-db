@@ -32,6 +32,7 @@ Page->Tuple (一个页可以存储多条记录)
 
 #### Exercise 4：HeapFile access method
 HeapPage：包含headers（bitmap）和tuples（tuple数组）\
+PageId(tableId, pgNo):基于表Id和页号确定页Id, RecordId(PageId, tupleNo)：基于页Id和元组号确定记录Id\
 **难点：**\
 (1) 大端模式下的header字节数组（bitmap）中的bit和tuple的对应关系 \
     header（大端模式）：7 6 5 4 3 2 1 0 | 15 14 13 12 11 10 9 8 | ... \
@@ -42,7 +43,24 @@ HeapPage：包含headers（bitmap）和tuples（tuple数组）\
     getNumEmptySlots \
 (3) 针对header实现迭代器 \
 需要跳过被删除的slot
- 
+
+#### Exercise 5：HeapFile
+难点：实现readPage和Iterator \
+readPage需要从磁盘随机读取某一页
+需要计算页的offset，使用RandomAccessFile对文件随机读写 \
+Iterator需要返回DbFileIterator对象\
+DbFileIterator：遍历文件中的页，并遍历页内的Tuple \
+因此，需要获取某一页的迭代器，在页遍历结束后，切换到下一页。
+#### Exercise 6：Operators
+实现SeqScan操作符：遍历整张表的Tuple \
+需要注意的是在返回TupleDesc时，需要在FileName前加上别名
+
+#### A simple query
+遇到的bug：命令行使用的jdk版本和idea的版本不一样，导致使用idea编译后，命令行运行出错\
+另外，'some_data_file.txt'在转换
+（```java -jar dist/simpledb.jar convert some_data_file.txt 3```）
+前是txt后缀，转换后会生成dat文件，开始理解错了，导致dat文件全是空字节。
+
 ---
 
 course-info
