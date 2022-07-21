@@ -50,7 +50,9 @@ readPage需要从磁盘随机读取某一页
 需要计算页的offset，使用RandomAccessFile对文件随机读写 \
 Iterator需要返回DbFileIterator对象\
 DbFileIterator：遍历文件中的页，并遍历页内的Tuple \
-因此，需要获取某一页的迭代器，在页遍历结束后，切换到下一页。
+因此，需要获取某一页的迭代器，在页遍历结束后，切换到下一页。\
+后续对迭代器重构，在open中只加载第一页，在next中切换下一页。
+
 #### Exercise 6：Operators
 实现SeqScan操作符：遍历整张表的Tuple \
 需要注意的是在返回TupleDesc时，需要在FileName前加上别名

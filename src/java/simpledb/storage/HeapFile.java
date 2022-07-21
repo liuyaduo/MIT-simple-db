@@ -136,27 +136,25 @@ public class HeapFile implements DbFile {
     private class HeapFileIterator implements DbFileIterator {
 
         private TransactionId tid;
-        private Iterator<Tuple>[] pageIterator;
+        private Iterator<Tuple> pageIterator;
         private int pgCursor;
 
         HeapFileIterator(TransactionId tid) {
             this.tid = tid;
-            pageIterator = new Iterator[pageNum];
         }
 
         @Override
         public void open() throws DbException, TransactionAbortedException {
-            for (int pgNo = 0; pgNo < pageNum; pgNo++) {
-                PageId pageId = new HeapPageId(getId(), pgNo);
-                HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
-                Iterator<Tuple> iterator = page.iterator();
-                pageIterator[pgNo] = iterator;
-            }
+            // 获取第0页的pageId
+            PageId pageId = new HeapPageId(getId(), 0);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
+            pageIterator = page.iterator();
+
         }
 
         @Override
         public boolean hasNext() throws DbException, TransactionAbortedException {
-            return this.pgCursor < pageNum && pageIterator[this.pgCursor] != null && pageIterator[this.pgCursor].hasNext();
+            return this.pgCursor < pageNum && pageIterator != null && pageIterator.hasNext();
         }
 
         @Override
@@ -165,10 +163,15 @@ public class HeapFile implements DbFile {
                 throw new NoSuchElementException();
             }
 
-            Tuple tuple = pageIterator[pgCursor].next();
+            Tuple tuple = pageIterator.next();
             // 当前页遍历完，切换到下一页
-            if (!pageIterator[pgCursor].hasNext()) {
+            if (!pageIterator.hasNext()) {
                 pgCursor ++;
+                if (pgCursor < pageNum) {
+                    PageId pageId = new HeapPageId(getId(), pgCursor);
+                    HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
+                    pageIterator = page.iterator();
+                }
             }
             return tuple;
         }
@@ -181,7 +184,8 @@ public class HeapFile implements DbFile {
 
         @Override
         public void close() {
-            Arrays.fill(pageIterator, null);
+            pgCursor = 0;
+            pageIterator = null;
         }
     }
 
