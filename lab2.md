@@ -3,10 +3,8 @@
 **Assigned: Tue, Mar 9, 2021**<br>
 **Due: Fri, Mar 19, 2021 11:59 PM EDT**
 
-
 <!--
 Version History:
-
 
 3/1/12 : Initial version
 -->
@@ -129,7 +127,7 @@ from iterator classes, and in its place put `implements OpIterator`.
 Recall that SimpleDB OpIterator classes implement the operations of the relational algebra. You will now implement two
 operators that will enable you to perform queries that are slightly more interesting than a table scan.
 
-* *Filter*: This operator only returns tuples that satisfy a `Predicate` that is specified as part of its constructor.
+* *Filter*: This operator only returns tuples that satisfy a `Predicate` （谓词）that is specified as part of its constructor.
   Hence, it filters out any tuples that do not match the predicate.
 
 * *Join*: This operator joins tuples from its two children according to a `JoinPredicate` that is passed in as part of
@@ -140,14 +138,14 @@ operators that will enable you to perform queries that are slightly more interes
 
 Implement the skeleton methods in:
 
-***  
+***
 
 * src/java/simpledb/execution/Predicate.java
 * src/java/simpledb/execution/JoinPredicate.java
 * src/java/simpledb/execution/Filter.java
 * src/java/simpledb/execution/Join.java
 
-***  
+***
 
 At this point, your code should pass the unit tests in PredicateTest, JoinPredicateTest, FilterTest, and JoinTest.
 Furthermore, you should be able to pass the system tests FilterTest and JoinTest.
@@ -174,13 +172,13 @@ do not need to worry about the situation where the number of groups exceeds avai
 
 Implement the skeleton methods in:
 
-***  
+***
 
 * src/java/simpledb/execution/IntegerAggregator.java
 * src/java/simpledb/execution/StringAggregator.java
 * src/java/simpledb/execution/Aggregate.java
 
-***  
+***
 
 At this point, your code should pass the unit tests IntegerAggregatorTest, StringAggregatorTest, and AggregateTest.
 Furthermore, you should be able to pass the AggregateTest system test.
@@ -203,7 +201,7 @@ the physical file on disk. You will need to ensure that the RecordID in the tupl
 
 Implement the remaining skeleton methods in:
 
-***  
+***
 
 * src/java/simpledb/storage/HeapPage.java
 * src/java/simpledb/storage/HeapFile.java<br>
@@ -220,18 +218,17 @@ implement in Lab 1 serve as useful abstractions. Note that there is a
 header.
 
 Note that it is important that the <tt>HeapFile.insertTuple()</tt>
-and <tt>HeapFile.deleteTuple()</tt> methods access pages using the <tt>BufferPool.getPage()</tt> method; otherwise, your
+and <tt>HeapFile.deleteTuple()</tt> methods access pages **using the <tt>BufferPool.getPage()</tt> method**; otherwise, your
 implementation of transactions in the next lab will not work properly.
 
 Implement the following skeleton methods in <tt>src/simpledb/BufferPool.java</tt>:
 
-***  
+***
 
 * insertTuple()
 * deleteTuple()
 
-***  
-
+***
 
 These methods should call the appropriate methods in the HeapFile that belong to the table being modified (this extra
 level of indirection is needed to support other types of files &mdash; like indices &mdash; in the future).
@@ -259,12 +256,12 @@ returning a single tuple with one integer field, containing the count.
 
 Implement the skeleton methods in:
 
-***  
+***
 
 * src/java/simpledb/execution/Insert.java
 * src/java/simpledb/execution/Delete.java
 
-***  
+***
 
 At this point, your code should pass the unit tests in InsertTest. We have not provided unit tests for `Delete`.
 Furthermore, you should be able to pass the InsertTest and DeleteTest system tests.
@@ -296,7 +293,7 @@ page it evicts.
 
 Fill in the `flushPage()` method and additional helper methods to implement page eviction in:
 
-***  
+***
 
 * src/java/simpledb/storage/BufferPool.java
 
@@ -568,7 +565,6 @@ You can also post on the class page on Piazza if you feel you have run into a bu
 ### 3.4 Grading
 
 <p>75% of your grade will be based on whether or not your code passes the system test suite we will run over it. These tests will be a superset of the tests we have provided. Before handing in your code, you should make sure it produces no errors (passes all of the tests) from both  <tt>ant test</tt> and <tt>ant systemtest</tt>.
-
 **Important:** before testing, gradescope will replace your <tt>build.xml</tt>, <tt>HeapFileEncoder.java</tt> and the
 entire contents of the <tt>test</tt>
 directory with our version of these files. This means you cannot change the format of <tt>.dat</tt> files!  You should

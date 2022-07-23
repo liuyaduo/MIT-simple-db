@@ -1,5 +1,6 @@
 package simpledb.execution;
 
+import simpledb.storage.Field;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.common.DbException;
 import simpledb.storage.Tuple;
@@ -13,6 +14,12 @@ import java.util.*;
 public class Join extends Operator {
 
     private static final long serialVersionUID = 1L;
+    private JoinPredicate p;
+    private OpIterator child1;
+    private OpIterator child2;
+    private TupleDesc td1;
+    private TupleDesc td2;
+    private Tuple t1;
 
     /**
      * Constructor. Accepts two children to join and the predicate to join them
@@ -27,11 +34,16 @@ public class Join extends Operator {
      */
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+        this.p = p;
+        this.child1 = child1;
+        this.child2 = child2;
+        this.td1 = child1.getTupleDesc();
+        this.td2 = child2.getTupleDesc();
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        return p;
     }
 
     /**
@@ -41,7 +53,7 @@ public class Join extends Operator {
      * */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        return td1.getFieldName(p.getField1());
     }
 
     /**
@@ -51,7 +63,7 @@ public class Join extends Operator {
      * */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        return td2.getFieldName(p.getField2());
     }
 
     /**
@@ -60,20 +72,35 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return TupleDesc.merge(td1, td2);
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        super.open();
+        child1.open();
+        child2.open();
+        if (child1.hasNext()) {
+            t1 = child1.next();
+        }
     }
 
     public void close() {
         // some code goes here
+        super.close();
+        child1.close();
+        child2.close();
+        t1 = null;
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        child1.rewind();
+        child2.rewind();
+        if (child1.hasNext()) {
+            t1 = child1.next();
+        }
     }
 
     /**
@@ -96,18 +123,68 @@ public class Join extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        return nestedLoopJoin();
+    }
+
+    /**
+     * 嵌套循环链接表，并返回符合连接条件的tuple
+     *
+     * @return 符合连接条件的tuple
+     * @throws TransactionAbortedException
+     * @throws DbException
+     */
+    private Tuple nestedLoopJoin() throws TransactionAbortedException, DbException {
+        while (true) {
+            while (child2.hasNext()) {
+                Tuple t2 = child2.next();
+                if (p.filter(t1, t2)) {
+                    return merge(t1, t2);
+                }
+            }
+            child2.rewind();
+            if (!child1.hasNext()) {
+                break;
+            }
+            t1 = child1.next();
+        }
         return null;
+    }
+
+    /**
+     * 合并两个tuple
+     * 加入t1为(1, 5, 9), t2为(1, 3, 5)，则合并的tuple为(1, 5, 9, 1, 3, 5)
+     *
+     * @param t1 第一个tuple
+     * @param t2 第二哥tuple
+     * @return 合并的tuple
+     */
+    public Tuple merge(Tuple t1, Tuple t2) {
+        Tuple mergeTuple = new Tuple(getTupleDesc());
+        for (int i = 0; i < td1.numFields() + td2.numFields(); i++) {
+            if (i < td1.numFields()) {
+                mergeTuple.setField(i, t1.getField(i));
+            } else {
+                mergeTuple.setField(i, t2.getField(i - td1.numFields()));
+            }
+        }
+        return mergeTuple;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        return new OpIterator[]{child1, child2};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        if (this.child1 != children[0]) {
+            this.child1 = children[0];
+        }
+        if (this.child2 != children[1]) {
+            this.child2 = children[1];
+        }
     }
 
 }

@@ -5,6 +5,7 @@ import simpledb.common.DbException;
 import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
 
+import javax.annotation.PreDestroy;
 import java.util.*;
 
 /**
@@ -13,6 +14,12 @@ import java.util.*;
 public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
+
+    private final Predicate predicate;
+
+    private OpIterator child;
+
+    private final TupleDesc td;
 
     /**
      * Constructor accepts a predicate to apply and a child operator to read
@@ -25,29 +32,37 @@ public class Filter extends Operator {
      */
     public Filter(Predicate p, OpIterator child) {
         // some code goes here
+        this.predicate = p;
+        this.child = child;
+        this.td = child.getTupleDesc();
     }
 
     public Predicate getPredicate() {
         // some code goes here
-        return null;
+        return predicate;
     }
 
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return td;
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        child.open();
+        super.open();
     }
 
     public void close() {
         // some code goes here
+        child.close();
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        child.rewind();
     }
 
     /**
@@ -62,18 +77,27 @@ public class Filter extends Operator {
     protected Tuple fetchNext() throws NoSuchElementException,
             TransactionAbortedException, DbException {
         // some code goes here
+        while (child.hasNext()) {
+            Tuple t = child.next();
+            if (predicate.filter(t)) {
+                return t;
+            }
+        }
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        return new OpIterator[]{this.child};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        if (this.child != children[0]) {
+            this.child = children[0];
+        }
     }
 
 }

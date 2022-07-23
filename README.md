@@ -51,7 +51,9 @@ readPage需要从磁盘随机读取某一页
 Iterator需要返回DbFileIterator对象\
 DbFileIterator：遍历文件中的页，并遍历页内的Tuple \
 因此，需要获取某一页的迭代器，在页遍历结束后，切换到下一页。\
-后续对迭代器重构，在open中只加载第一页，在next中切换下一页。
+HeapFile迭代器重构: \
+v1.在open中只加载第一页，在next中切换下一页。\
+v2.由于可能存在一整页为空，故需要循环找到下一个不为空的页；另外将切换页移到了hasNext，next只管迭代
 
 #### Exercise 6：Operators
 实现SeqScan操作符：遍历整张表的Tuple \
@@ -62,6 +64,38 @@ DbFileIterator：遍历文件中的页，并遍历页内的Tuple \
 另外，'some_data_file.txt'在转换
 （```java -jar dist/simpledb.jar convert some_data_file.txt 3```）
 前是txt后缀，转换后会生成dat文件，开始理解错了，导致dat文件全是空字节。
+
+### lab2
+#### Filter and Join
+实现谓词和operator \
+谓词的核心是filter，需要借助field的compare方法。 \
+operator（Join等）继承自Operator抽象类，Operator抽象类实现了OpIterator接口 \
+operator的核心是实现迭代器，由于Operator已经提供了模板方法，故只需实现fetchNext等方法。 \
+fetchNext需要借助谓词过滤不符合条件的元组，返回下一个符合条件的元组。\
+
+需要注意的是：对于Join，如果是采用嵌套循环，需要找准每个child操作符使用next的时机。
+
+#### Aggregates
+实现聚合操作，其中String类型的字段只能使用count聚合操作 /
+实现的时候没有理清楚Aggregate和StringAggregator、IntegerAggregator的关系，导致花费了较长的时间/
+StringAggregator和IntegerAggregator的核心是mergeTupleIntoGroup /
+mergeTupleIntoGroup:把tuple根据分组字段gbField进行分组,并按照聚合操作符实现聚合操作。
+由于要求空间复杂度为O(n),n为group个数，因此采用哈希表存储不同group的字段和它对应的聚合结果。
+每执行一次mergeTupleIntoGroup都会更新一次group字段对应聚合结果。/
+iterator函数根据哈希表的values创建TupleIterator对象并返回。/
+
+而Aggregate则是利用实现的StringAggregator、IntegerAggregator，将child的所有tuple循环mergeTupleIntoGroup
+具体使用StringAggregator还是IntegerAggregator，根据afield字段的类型来决定。
+
+#### HeapFile Mutability
+实现HeapPage、HeapFile、BufferPool的insertTuple和deleteTuple\
+HeapPage实现在页内插入删除元组，删除为逻辑删除，将header中对应的bit置0.\
+插入元组需要遍历找到页内空的slot。、\
+HeapFile实现在文件内插入删除元组，比较关键的插入元组：\
+需要对HeapFile中的页遍历找到存在空slot的页插入，如果没有的话，需要创建空页。\
+需要注意的地方是，插入删除需要返回脏页，因此需要使用<tt>BufferPool.getPage()</tt>方法获取对应的页，不能直接在文件中写入。\
+由于，插入元组需要创建新的页，写到文件，因此**需要先把空的页写到文件，再通过BufferPool.getPage()获取页插入元组**，否则如果先插入元组，在将页写到文件，会导致返回的页不是脏页。
+**修复BUG**：HeapFile.numPages()
 
 ---
 

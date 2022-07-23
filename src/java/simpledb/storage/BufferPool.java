@@ -4,9 +4,12 @@ import simpledb.common.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
+import javax.xml.crypto.Data;
 import java.io.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -165,6 +168,13 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        HeapFile dbFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> dirtyPages = dbFile.insertTuple(tid, t);
+        for (Page dirtyPage : dirtyPages) {
+            dirtyPage.markDirty(true, tid);
+            cache.put(dirtyPage.getId(), dirtyPage);
+        }
+        // TODO:版本号？
     }
 
     /**
@@ -184,6 +194,15 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        PageId pageId = t.getRecordId().getPageId();
+        Page page = getPage(tid, pageId, Permissions.READ_WRITE);
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(page.getId().getTableId());
+        List<Page> dirtyPages = dbFile.deleteTuple(tid, t);
+        for (Page dirtyPage : dirtyPages) {
+            dirtyPage.markDirty(true, tid);
+            cache.put(dirtyPage.getId(), dirtyPage);
+        }
+        // TODO:版本号？
     }
 
     /**
