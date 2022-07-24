@@ -206,7 +206,7 @@ public class HeapFile implements DbFile {
                 }
                 // 当前页遍历完或页为空，切换到下一页
                 pgCursor ++;
-                if (pgCursor == numPages()) break;
+                if (pgCursor >= numPages()) break;
                 PageId pageId = new HeapPageId(getId(), pgCursor);
                 HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
                 pageIterator = page.iterator();

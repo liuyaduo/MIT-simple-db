@@ -7,10 +7,7 @@ import simpledb.transaction.TransactionId;
 import javax.xml.crypto.Data;
 import java.io.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,14 +32,13 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    // BufferPool缓存页的最大数量
-    private int maxNumPages;
-
     // BufferPool已缓存页的数量
     private int pagesNum;
 
     // 缓存
     private Map<PageId, Page> cache;
+
+    private int numPages;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -52,8 +48,9 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.pagesNum = 0;
-        this.maxNumPages = numPages;
-        cache = new ConcurrentHashMap<>();
+        this.numPages = numPages;
+
+        cache = new LinkedHashMap<>(numPages, 0.75f, true);
     }
     
     public static int getPageSize() {
@@ -86,12 +83,15 @@ public class BufferPool {
      * @param perm the requested permissions on the page
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
-        throws TransactionAbortedException, DbException {
+            throws TransactionAbortedException, DbException {
         // some code goes here
         if (!cache.containsKey(pid)) {
-            if (pagesNum == maxNumPages) {
-                // TODO
-                throw new DbException("尚未实现替换策略！");
+            if (pagesNum == this.numPages) {
+                try {
+                    evictPage();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
             // 读取pid对应的page
             int pageTableId = pid.getTableId();
@@ -214,6 +214,14 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
 
+        // LinkedHashMap迭代器循坏内，调用cache.get等方法会改变容器结构，引起并发修改异常
+        for (Map.Entry<PageId, Page> e : cache.entrySet()) {
+            PageId pid = e.getKey();
+            Page page = e.getValue();
+            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
+            page.markDirty(false, null);
+        }
+
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -227,15 +235,20 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        cache.remove(pid);
     }
 
     /**
      * Flushes a certain page to disk
      * @param pid an ID indicating the page to flush
      */
-    private synchronized  void flushPage(PageId pid) throws IOException {
+    private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        if (cache.containsKey(pid)) {
+            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(cache.get(pid));
+            cache.get(pid).markDirty(false, null);
+        }
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -249,9 +262,19 @@ public class BufferPool {
      * Discards a page from the buffer pool.
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
-    private synchronized  void evictPage() throws DbException {
+    private synchronized  void evictPage() throws DbException, IOException {
         // some code goes here
         // not necessary for lab1
+
+        Iterator<Map.Entry<PageId, Page>> iterator = cache.entrySet().iterator();
+        if (iterator.hasNext()) {
+            Map.Entry<PageId, Page> oldestPage = iterator.next();
+            flushPage(oldestPage.getKey());
+            System.out.println("淘汰页：" + oldestPage.getKey());
+            cache.remove(oldestPage.getKey());
+            pagesNum--;
+        }
+
     }
 
 }

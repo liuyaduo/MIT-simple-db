@@ -38,11 +38,12 @@ public class EvictionTest extends SimpleDbTestBase {
         SeqScan scan = new SeqScan(tid, f.getId(), "");
         scan.open();
         while (scan.hasNext()) {
-            scan.next();
+            Tuple t = scan.next();
         }
         System.out.println("EvictionTest scan complete, testing memory usage of scan");
         long endMem = SystemTestUtil.getMemoryFootprint();
         long memDiff = (endMem - beginMem) / (1<<20);
+        System.out.println("Scan took " + (endMem - beginMem) + " B of RAM");
         if (memDiff > MEMORY_LIMIT_IN_MB) {
             Assert.fail("Did not evict enough pages.  Scan took " + memDiff + " MB of RAM, when limit was " + MEMORY_LIMIT_IN_MB);
         }

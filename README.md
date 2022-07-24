@@ -94,8 +94,22 @@ HeapPage实现在页内插入删除元组，删除为逻辑删除，将header中
 HeapFile实现在文件内插入删除元组，比较关键的插入元组：\
 需要对HeapFile中的页遍历找到存在空slot的页插入，如果没有的话，需要创建空页。\
 需要注意的地方是，插入删除需要返回脏页，因此需要使用<tt>BufferPool.getPage()</tt>方法获取对应的页，不能直接在文件中写入。\
-由于，插入元组需要创建新的页，写到文件，因此**需要先把空的页写到文件，再通过BufferPool.getPage()获取页插入元组**，否则如果先插入元组，在将页写到文件，会导致返回的页不是脏页。
+由于，插入元组需要创建新的页，写到文件，因此**需要先把空的页写到文件，再通过BufferPool.getPage()获取页插入元组**，否则如果先插入元组，在将页写到文件，会导致返回的页不是脏页。\
 **修复BUG**：HeapFile.numPages()
+
+#### Insertion and deletion
+实现insert和deletion操作符。由于前面已经实现了insertTuple和deleteTuple，故整体实现较简单。\
+**一处细节**导致system test始终通不过：\
+由于insert和delete不管有没有插入元组，都要返回一个tuple，包含插入的个数。因此不能通过插入元组的个数判断fetchNext是否返回null(表示插入操作符的返回结果为空，迭代结束)\
+因此，可以通过判断fetchNext是否被调用过，来判断是否返回null；\
+**修复BUG**：HeapFile.HeapFileIterator.hasNext(): \
+**if (pgCursor == numPages()) break;** -> **if (pgCursor == numPages()) break;** \
+在跳出
+
+#### Page eviction
+使用LinkedHashMap容器，实现Lru淘汰策略 \
+需要注意的是在flushAllPages中，迭代LinkedHashMap容器时，调用容器的get函数，会引起并发修改异常(ConcurrentModificationException)。\
+因为get函数，会导致对应节点移动到链表的尾部。
 
 ---
 
