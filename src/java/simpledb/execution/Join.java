@@ -134,19 +134,36 @@ public class Join extends Operator {
      * @throws DbException
      */
     private Tuple nestedLoopJoin() throws TransactionAbortedException, DbException {
-        while (true) {
+//        while (true) {
+//            while (child2.hasNext()) {
+//                Tuple t2 = child2.next();
+//                if (p.filter(t1, t2)) {
+//                    return merge(t1, t2);
+//                }
+//            }
+//            child2.rewind();
+//            if (!child1.hasNext()) {
+//                break;
+//            }
+//            t1 = child1.next();
+//        }
+
+        while (child1.hasNext() || child2.hasNext()) {
+            // child2没遍历完继续遍历，直至找到符合连接条件的返回
             while (child2.hasNext()) {
                 Tuple t2 = child2.next();
                 if (p.filter(t1, t2)) {
                     return merge(t1, t2);
                 }
             }
-            child2.rewind();
-            if (!child1.hasNext()) {
-                break;
+
+            // child2遍历完没有找到符合连接条件的，将child1切换到下一条，同时child2.rewind
+            if (child1.hasNext()) {
+                child2.rewind();
+                t1 = child1.next();
             }
-            t1 = child1.next();
         }
+
         return null;
     }
 

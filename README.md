@@ -73,7 +73,43 @@ operator（Join等）继承自Operator抽象类，Operator抽象类实现了OpIt
 operator的核心是实现迭代器，由于Operator已经提供了模板方法，故只需实现fetchNext等方法。 \
 fetchNext需要借助谓词过滤不符合条件的元组，返回下一个符合条件的元组。\
 
-需要注意的是：对于Join，如果是采用嵌套循环，需要找准每个child操作符使用next的时机。
+需要注意的是：对于Join，如果是采用嵌套循环，需要找准child1和child2操作符切换的时机。\
+v1 ：
+```
+while (true) {
+   while (child2.hasNext()) {
+      Tuple t2 = child2.next();
+      if (p.filter(t1, t2)) {
+          return merge(t1, t2);
+      }
+   }
+   child2.rewind();
+   if (!child1.hasNext()) {
+       break;
+   }
+   t1 = child1.next();
+}
+return null;
+```
+2022.7.24 重构join
+v2: 
+```
+while (child1.hasNext() || child2.hasNext()) {
+    while (child2.hasNext()) {
+        Tuple t2 = child2.next();
+        if (p.filter(t1, t2)) {
+            return merge(t1, t2);
+        }
+    }
+
+    if (child1.hasNext()) {
+        child2.rewind();
+        t1 = child1.next();
+    }
+}
+
+return null;
+```
 
 #### Aggregates
 实现聚合操作，其中String类型的字段只能使用count聚合操作 /
