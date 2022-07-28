@@ -2,9 +2,27 @@ package simpledb.optimizer;
 
 import simpledb.execution.Predicate;
 
+import java.util.Map;
+
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
 public class IntHistogram {
+
+    private int bucketsNum;
+
+    private int min;
+
+    private int max;
+
+    // 直方图的桶数组
+    private int[] buckets;
+
+    // 桶的宽度
+    private double width;
+
+    // 加入直方图的元组的个数
+    private int nTuples;
+
 
     /**
      * Create a new IntHistogram.
@@ -24,6 +42,11 @@ public class IntHistogram {
      */
     public IntHistogram(int buckets, int min, int max) {
     	// some code goes here
+        this.bucketsNum = buckets;
+        this.min = min;
+        this.max = max;
+        this.buckets = new int[buckets];
+        this.width = Math.ceil((max - min + 1) / (double) buckets);
     }
 
     /**
@@ -32,6 +55,11 @@ public class IntHistogram {
      */
     public void addValue(int v) {
     	// some code goes here
+        if (v >= min && v <= max) {
+            int index = getIndex(v);
+            buckets[index] ++;
+            nTuples ++;
+        }
     }
 
     /**
@@ -45,9 +73,64 @@ public class IntHistogram {
      * @return Predicted selectivity of this particular operator and value
      */
     public double estimateSelectivity(Predicate.Op op, int v) {
+        // some code goes here
 
-    	// some code goes here
-        return -1.0;
+        double selectivity = 0;
+        int bucketIndex = getIndex(v);
+        int[] range = getRange(bucketIndex);
+
+        if (op.toString().equals("=")) {
+            if (v >= min && v <= max) {
+                selectivity = (buckets[bucketIndex] / width) / nTuples;
+            }
+        } else if (op.toString().equals(">")) {
+            if (v < min) {
+                selectivity = 1;
+            } else if (v < max) {
+                selectivity += (range[1] - v) / width * buckets[bucketIndex] / nTuples;
+                for (int i = bucketIndex + 1; i < bucketsNum; i++) {
+                    selectivity += (double) buckets[i] / nTuples;
+                }
+            }
+        } else if (op.toString().equals("<")) {
+            if (v > max) {
+                selectivity = 1;
+            }else if (v > min) {
+                selectivity += (v - range[0]) / width * buckets[bucketIndex] / nTuples;
+                for (int i = 0; i < bucketIndex; i++) {
+                    selectivity += (double) buckets[i] / nTuples;
+                }
+            }
+        } else if (op.toString().equals(">=")) {
+            if (v <= min) {
+                selectivity = 1;
+            } else if (v <= max) {
+                selectivity += (range[1] - v + 1) / width * buckets[bucketIndex] / nTuples;
+                for (int i = bucketIndex + 1; i < bucketsNum; i++) {
+                    selectivity += (double) buckets[i] / nTuples;
+                }
+            }
+        } else if (op.toString().equals("<=")) {
+            if (v >= max) {
+                selectivity = 1;
+            } else if (v >= min) {
+                selectivity += (v - range[0] + 1) / width * buckets[bucketIndex] / nTuples;
+                for (int i = 0; i < bucketIndex; i++) {
+                    selectivity += (double) buckets[i] / nTuples;
+                }
+            }
+        } else if (op.toString().equals("<>")) {
+            if (v < min || v > max) {
+                selectivity = 1;
+            } else {
+                selectivity = 1 - (buckets[bucketIndex] / width) / nTuples;
+            }
+
+        } else {
+            System.out.println("不合适的操作符！");
+        }
+
+        return selectivity;
     }
     
     /**
@@ -61,7 +144,7 @@ public class IntHistogram {
     public double avgSelectivity()
     {
         // some code goes here
-        return 1.0;
+        return 1;
     }
     
     /**
@@ -69,6 +152,38 @@ public class IntHistogram {
      */
     public String toString() {
         // some code goes here
-        return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < buckets.length; i++) {
+            int[] range = getRange(i);
+            sb.append("[" + range[0] + " : " + range[1] + "] -> " + buckets[i] + "\n");
+        }
+        return sb.toString();
     }
+
+    /**
+     * 返回第i个桶的范围
+     * @param i
+     * @return [start, end] (左闭右闭)
+     */
+    private int[] getRange(int i) {
+        if (i < 0 || i >= bucketsNum) {
+            System.out.println(i + " 超出了桶号的范围！");
+        }
+        int start = min + i * (int) width;
+        return new int[]{start, start + (int) width - 1};
+    }
+
+    /**
+     * 计算值v对应的桶号
+     * @param v
+     * @return 第几个桶
+     */
+    private int getIndex(int v) {
+        if (v < min || v > max) {
+            System.out.println(v + "超出了" + "[" + min + ":" + max + "]" + "范围");
+        }
+        int index = (v - min) / (int) width;
+        return index;
+    }
+
 }

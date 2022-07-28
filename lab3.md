@@ -4,10 +4,10 @@
 **Due: Tuesday, Apr 6, 2021**
 
 In this lab, you will implement a query optimizer on top of SimpleDB.
-The main tasks include implementing a selectivity estimation framework
-and a cost-based optimizer. You have freedom as to exactly what you
-implement, but we recommend using something similar to the Selinger
-cost-based optimizer discussed in class (Lecture 9).
+The main tasks include implementing **a selectivity estimation framework**
+and **a cost-based optimizer**. You have freedom as to exactly what you
+implement, but we recommend using something similar to **the Selinger**
+**cost-based optimizer** discussed in class (Lecture 9).
 
 The remainder of this document describes what is involved in
 adding optimizer support and provides a basic outline of how
@@ -75,6 +75,7 @@ to review the <a href="https://github.com/MIT-DB-Class/simple-db-hw-2021/blob/ma
 before starting this lab.  Briefly, if you have a catalog file
 <tt>catalog.txt</tt> describing your tables, you can run the parser by
 typing:
+
 ```
 java -jar dist/simpledb.jar parser catalog.txt
 ```
@@ -108,7 +109,7 @@ the basic operation is as follows:
     represents the parsed query. <tt>parseQuery</tt> then calls the method <tt>physicalPlan</tt> on the
     <tt>LogicalPlan</tt> instance it has constructed.  The <tt>physicalPlan</tt> method returns a
     <tt>DBIterator</tt> object that can be used to actually run the query.
-    
+
 In the exercises to come, you will implement the methods that help
 <tt>physicalPlan</tt> devise an optimal plan.
 
@@ -302,7 +303,7 @@ While implementing your simple solution, you  should keep in mind the following:
 
 <!--  
   * <a name="change">The following three paragraphs are different in this version of the lab. </a> *
-  .-->
+    .-->
 *  For equality joins, when one of the attributes is a primary key, the number of tuples produced by the join cannot
    be larger than the cardinality of the non-primary key attribute.
 * For equality joins when there is no primary key, it's hard to say much about what the size of the output
@@ -321,7 +322,6 @@ While implementing your simple solution, you  should keep in mind the following:
 
 ***
 **Exercise 3:  Join Cost Estimation**
-
 
 The class <tt>JoinOptimizer.java</tt> includes all of the methods
 for ordering and computing costs of joins.  In this exercise, you
@@ -345,6 +345,7 @@ a join, specifically:
 
 After implementing these methods, you should be able to pass the unit
 tests <tt>estimateJoinCostTest</tt> and <tt>estimateJoinCardinality</tt> in <tt>JoinOptimizerTest.java</tt>.
+
 ***
 
 
@@ -372,8 +373,8 @@ Translating the algorithm given in lecture to the join node list form mentioned 
 
 To help you implement this algorithm, we have provided several classes and methods to assist you.  First,
 the method <tt>enumerateSubsets(List<T> v, int size)</tt> in <tt>JoinOptimizer.java</tt> will return
-a set of all of the subsets of <tt>v</tt> of size <tt>size</tt>. This method is VERY inefficient for large
-sets; you can earn extra credit by implementing a more efficient enumerator (hint: consider using an in-place
+a set of all of the subsets of <tt>v</tt> of size <tt>size</tt>. ***This method is VERY inefficient for large***
+***sets; you can earn extra credit by implementing a more efficient enumerator*** (hint: consider using an in-place
 generation algorithm and a lazy iterator (or stream) interface to avoid materializing the entire power set).
 
 Second, we have provided the method:
@@ -442,7 +443,6 @@ allows you to find the selectivity of any predicates over a table;
 it is guaranteed to have one entry per table name in the
 <tt>FROM</tt> list.  Finally, <tt>explain</tt> specifies that you
 should output a representation of the join order for informational purposes.
-
 
 You may wish to use the helper methods and classes described above to assist
 in your implementation. Roughly, your implementation should follow

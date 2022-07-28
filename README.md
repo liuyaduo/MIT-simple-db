@@ -65,7 +65,7 @@ v2.由于可能存在一整页为空，故需要循环找到下一个不为空�
 （```java -jar dist/simpledb.jar convert some_data_file.txt 3```）
 前是txt后缀，转换后会生成dat文件，开始理解错了，导致dat文件全是空字节。
 
-### lab2
+### lab2：SimpleDB Operators
 #### Filter and Join
 实现谓词和operator \
 谓词的核心是filter，需要借助field的compare方法。 \
@@ -146,6 +146,127 @@ HeapFile实现在文件内插入删除元组，比较关键的插入元组：\
 使用LinkedHashMap容器，实现Lru淘汰策略 \
 需要注意的是在flushAllPages中，迭代LinkedHashMap容器时，调用容器的get函数，会引起并发修改异常(ConcurrentModificationException)。\
 因为get函数，会导致对应节点移动到链表的尾部。
+
+
+### lab3：Query Optimization
+#### Exercise1: IntHistogram
+实现Int类型字段的直方图，计算选择率（selectivity）\
+对范围[min, max]，分桶，然后基于（=, <, <=, >, >=, <>）计算概率。
+
+#### Exercise2: TableStats
+计算表中每个字段的直方图，需要先遍历计算每个int字段的最小值和最大值。\
+然后基于min，max创建IntHistogram，最后将每个元组对应字段的值加入其中。、\
+总共三次遍历。
+
+#### Exercise3: Join Cost Estimation
+estimateJoinCardinality：评估join得到的元组个数（Cardinality）
+*  For equality joins, when one of the attributes is a primary key, the number of tuples produced by the join cannot
+   be larger than the cardinality of the non-primary key attribute.
+* For equality joins when there is no primary key, it's hard to say much about what the size of the output
+  is -- it could be the size of the product of the cardinalities of the tables (if both tables have the
+  same value for all tuples) -- or it could be 0.  It's fine to make up a simple heuristic (say,
+  the size of the larger of the two tables).
+*  For range scans, it is similarly hard to say anything accurate about sizes.
+   The size of the output should be proportional to
+   the sizes of the inputs.  It is fine to assume that a fixed fraction
+   of the cross-product is emitted by range scans (say, 30%).  In general, the cost of a range
+   join should be larger than the cost of a non-primary key equality join of two tables
+   of the same size.
+
+estimateJoinCost：计算join的时间花费（嵌套循环）
+```
+joincost(t1 join t2) = scancost(t1) + ntups(t1) x scancost(t2) //IO cost
+                       + ntups(t1) x ntups(t2)  //CPU cost
+```
+
+#### Exercise4:  Join Ordering
+优化**enumerateSubsets**：\
+优化前：bigOrderJoinsTest花费**7s633ms**\
+先计算长度为0的组合，然后根据长度为0的组合，添加一个元素，得到长度为1的组合，直至达到size。\
+因此时间复杂度为O(n^size) (n为集合长度，size为要得到的组合的长度)\
+然而对于size=n时，耗时最长，然后size=n，只有一种组合即集合本身，因此在计算size较大的组合时耗时很长。\
+另一方面，空间复杂度也为O(n^size),需要花费大量的事件创建set。
+
+优化后：bigOrderJoinsTest花费**1s833ms**\
+时间复杂度为O(C_{n, size}), 即与返回的组合数成正比，当size较大时，如为n时，仅需常数时间。\
+另一方面也解决了空间复杂度过高的问题。\
+优化后实现用于返回组合结果的迭代器：
+```
+public static class CombinationIter<E> implements Iterator<Set<E>> {
+    // 被组合的元素的个数
+    private int len;
+    // 组合的长度
+    private int combLen;
+    // 组合的位置
+    private int[] orders;
+    private boolean flag;
+
+    private List<E> pool;
+    private Set<E> combs;
+
+    public CombinationIter(List<E> v, int len, int combLen) {
+        if (len < combLen) {
+            throw new IllegalArgumentException("len: " + len + " < " + "combLen: " + combLen);
+        }
+        this.len = len;
+        this.combLen = combLen;
+        orders = new int[combLen];
+        for (int i = 0; i < combLen; i++) {
+            orders[i] = i;
+        }
+        flag = true;
+        pool = v;
+    }
+
+    @Override
+    public boolean hasNext() {
+        if (flag) return flag;
+        int i;
+        for (i = combLen - 1; i >= 0; i--) {
+            if (orders[i] != i + len - combLen) {
+                break;
+            }
+        }
+        if (i < 0) {
+            return false;
+        }
+        orders[i] ++;
+        for (int j = i+1; j < combLen; j++) {
+            orders[j] = orders[j-1] + 1;
+        }
+        return true;
+    }
+
+    @Override
+    public Set<E> next() {
+        flag = false;
+        combs = new HashSet<>();
+        for (int j = 0; j < combLen; j++) {
+            combs.add(pool.get(orders[j]));
+        }
+        return combs;
+    }
+}
+```
+
+实现Selinger算法：实现对多个join操作的排序，使总join操作的代价最小（left-deep join）\
+伪代码（本质上动态规划）：
+```
+1. j = set of join nodes
+2. for (i in 1...|j|):
+3.     for s in {all length i subsets of j}
+4.       bestPlan = {}
+5.       for s' in {all length i-1 subsets of s}
+6.            subplan = optjoin(s')
+7.            plan = best way to join (s-s') to subplan
+8.            if (cost(plan) < cost(bestPlan))
+9.               bestPlan = plan
+10.      optjoin(s) = bestPlan
+11. return optjoin(j)
+```
+其中6-9行，computeCostAndCardOfSubplan()函数已经实现\
+由于长度为i的join集合需要借助i-1的join集合的cost等信息去计算最优的join方式（第7行），故需要记录i-1的信息，optjoin(s)为s的cost、order等缓存（PlanCache），
+
 
 ---
 

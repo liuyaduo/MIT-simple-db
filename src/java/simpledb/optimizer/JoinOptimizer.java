@@ -6,6 +6,7 @@ import simpledb.execution.*;
 import simpledb.storage.TupleDesc;
 
 import java.util.*;
+import java.util.concurrent.CompletionStage;
 
 import javax.swing.*;
 import javax.swing.tree.*;
@@ -130,7 +131,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
@@ -176,7 +177,16 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // some code goes here
-        return card <= 0 ? 1 : card;
+        if (joinOp.equals(Predicate.Op.EQUALS)) {
+            if (!t1pkey && !t2pkey) {
+                card = Math.min(card1, card2);
+            } else {
+                card = t1pkey ? card2 : card1;
+            }
+        } else {
+            card = (int) (card1 * card2 * 0.3);
+        }
+        return card;
     }
 
     /**
@@ -207,8 +217,70 @@ public class JoinOptimizer {
             els = newels;
         }
 
+        // long end = System.currentTimeMillis();
+        // System.out.println("enumerate cost: " + (end - start) + "ms");
         return els;
 
+    }
+
+    /**
+     * 用于返回某个长度组合的迭代器
+     * @param <E>
+     */
+    public static class CombinationIter<E> implements Iterator<Set<E>> {
+        // 被组合的元素的个数
+        private int len;
+        // 组合的长度
+        private int combLen;
+        // 组合的位置
+        private int[] orders;
+        private boolean flag;
+
+        private List<E> pool;
+        private Set<E> combs;
+
+        public CombinationIter(List<E> v, int len, int combLen) {
+            if (len < combLen) {
+                throw new IllegalArgumentException("len: " + len + " < " + "combLen: " + combLen);
+            }
+            this.len = len;
+            this.combLen = combLen;
+            orders = new int[combLen];
+            for (int i = 0; i < combLen; i++) {
+                orders[i] = i;
+            }
+            flag = true;
+            pool = v;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (flag) return flag;
+            int i;
+            for (i = combLen - 1; i >= 0; i--) {
+                if (orders[i] != i + len - combLen) {
+                    break;
+                }
+            }
+            if (i < 0) {
+                return false;
+            }
+            orders[i] ++;
+            for (int j = i+1; j < combLen; j++) {
+                orders[j] = orders[j-1] + 1;
+            }
+            return true;
+        }
+
+        @Override
+        public Set<E> next() {
+            flag = false;
+            combs = new HashSet<>();
+            for (int j = 0; j < combLen; j++) {
+                combs.add(pool.get(orders[j]));
+            }
+            return combs;
+        }
     }
 
     /**
@@ -235,10 +307,32 @@ public class JoinOptimizer {
             Map<String, TableStats> stats,
             Map<String, Double> filterSelectivities, boolean explain)
             throws ParsingException {
-
         // some code goes here
-        //Replace the following
-        return joins;
+        PlanCache planCache = new PlanCache();
+        for (int i = 1; i <= joins.size(); i++) {
+            // 得到所有长度为i的plan集合
+            //Set<Set<LogicalJoinNode>> setsOfILength = enumerateSubsets(joins, i);
+            CombinationIter<LogicalJoinNode> logicalJoinNodeCombinationIter = new CombinationIter<>(joins, joins.size(), i);
+            while (logicalJoinNodeCombinationIter.hasNext()) {
+                Set<LogicalJoinNode> joinSet = logicalJoinNodeCombinationIter.next();
+            //for (Set<LogicalJoinNode> joinSet: setsOfILength) {
+                CostCard bestCostCard = new CostCard();
+                bestCostCard.cost = Double.MAX_VALUE;
+                for (LogicalJoinNode joinToRemove: joinSet) {
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinToRemove, joinSet, bestCostCard.cost, planCache);
+                    if (costCard != null) {
+                        bestCostCard = costCard;
+                    }
+                }
+                // 缓存每个joinset最好的plan
+                planCache.addPlan(joinSet, bestCostCard.cost, bestCostCard.card, bestCostCard.plan);
+            }
+        }
+
+        if (explain) {
+            printJoins(joins, planCache, stats, filterSelectivities);
+        }
+        return planCache.getOrder(new HashSet<>(joins));
     }
 
     // ===================== Private Methods =================================

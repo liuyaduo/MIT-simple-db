@@ -270,7 +270,7 @@ public class BufferPool {
         if (iterator.hasNext()) {
             Map.Entry<PageId, Page> oldestPage = iterator.next();
             flushPage(oldestPage.getKey());
-            System.out.println("淘汰页：" + oldestPage.getKey());
+            //System.out.println("淘汰页：" + oldestPage.getKey());
             cache.remove(oldestPage.getKey());
             pagesNum--;
         }

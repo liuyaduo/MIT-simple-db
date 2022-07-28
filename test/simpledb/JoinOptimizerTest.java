@@ -2,6 +2,7 @@ package simpledb;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.*;
 
 import org.junit.Assert;
@@ -628,5 +629,15 @@ public class JoinOptimizerTest extends SimpleDbTestBase {
         // Make sure that "a" is the outermost table in the join
         Assert.assertTrue(result.get(result.size() - 1).t2Alias.equals("a")
                 || result.get(result.size() - 1).t1Alias.equals("a"));
+    }
+
+    @Test
+    public void testCombination() {
+        Integer[] a = new Integer[] {5, 7, 8, 9};
+        List<Integer> list = Arrays.asList(a);
+        JoinOptimizer.CombinationIter combination = new JoinOptimizer.CombinationIter(list, a.length, 2);
+        while (combination.hasNext()) {
+            System.out.println(combination.next());
+        }
     }
 }
