@@ -267,6 +267,19 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 其中6-9行，computeCostAndCardOfSubplan()函数已经实现\
 由于长度为i的join集合需要借助i-1的join集合的cost等信息去计算最优的join方式（第7行），故需要记录i-1的信息，optjoin(s)为s的cost、order等缓存（PlanCache），
 
+### Lab4: Transactions
+
+#### Exercise1:
+
+#### Exercise2:
+
+#### Exercise3:
+
+#### Exercise4:
+
+#### Exercise5:
+
+#### Exercise6:
 
 ---
 
