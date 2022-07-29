@@ -79,7 +79,7 @@ As we discussed in class, this means that:
    are locked by an uncommitted transaction (this is NO STEAL).
 *  On transaction commit, you should force dirty pages to disk (e.g.,
    write the pages out) (this is FORCE).
-   
+
 To further simplify your life, you may assume that SimpleDB will not crash
 while processing a `transactionComplete` command.  Note that
 these three points mean that you do not need to implement log-based
@@ -98,8 +98,8 @@ We recommend locking at *page* granularity; please do not
 implement table-level locking (even though it is possible) for simplicity of testing. The rest
 of this document and our unit tests assume page-level locking.
 
-You will need to create data structures that keep track of which locks
-each transaction holds and check to see if a lock should be granted
+You will need to `create data structures that keep track of which locks`
+`each transaction holds` and check to see if a lock should be granted
 to a transaction when it is requested.
 
 You will need to implement shared and exclusive locks; recall that these
@@ -181,12 +181,12 @@ any of the pages they access (you should have done this when you
 implemented this code in lab 2, but we did not test for this case.)
 
 After you have acquired locks, you will need to think about when to
-release them as well. It is clear that you should release all locks
-associated with a transaction after it has committed or aborted to ensure strict 2PL.
+release them as well. **It is clear that you should release all locks**
+**associated with a transaction after it has committed or aborted to ensure strict 2PL.**
 However, it is
 possible for there to be other scenarios in which releasing a lock before
-a transaction ends might be useful. For instance, you may release a shared lock
-on a page after scanning it to find empty slots (as described below).
+a transaction ends might be useful. **For instance, you may release a shared lock**
+**on a page after scanning it to find empty slots** (as described below).
 
 ***
 
@@ -220,7 +220,6 @@ locks in the following situations:
    Although this apparently contradicts the rules of two-phase locking, it is ok because
    *t* did not use any data from the page, such that a concurrent transaction *t'* which updated
    *p* cannot possibly effect the answer or outcome of *t*.
-
 
 At this point, your code should pass the unit tests in
 LockingTest.

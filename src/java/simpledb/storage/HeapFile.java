@@ -135,14 +135,21 @@ public class HeapFile implements DbFile {
             throw new DbException("tupledesc is mismatch, the tuple can't be add!");
         }
         ArrayList<Page> pageList = new ArrayList<>();
+        // 扫描含有空slot的页
         for (int i = 0; i < numPages(); i++) {
             HeapPageId pageId = new HeapPageId(getId(), i);
-            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
             if (page.getNumEmptySlots() != 0) {
+                // 有空的槽位，升级读锁为写锁
+                page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
                 page.insertTuple(t);
                 pageList.add(page);
                 return pageList;
+            } else {
+                // 没有空的槽位，释放读锁
+                Database.getBufferPool().unsafeReleasePage(tid, pageId);
             }
+
         }
 
         // 没有包含空slot的页，需要创建新的页,（将空页刷到磁盘，相当于给文件增加一页的空间），然后从BufferPool获取页，将tuple插入页返回（此时为脏页）

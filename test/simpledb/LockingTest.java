@@ -6,12 +6,18 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import junit.framework.JUnit4TestAdapter;
 import simpledb.common.Database;
+import simpledb.common.DbException;
 import simpledb.common.Permissions;
 import simpledb.common.Utility;
-import simpledb.storage.BufferPool;
-import simpledb.storage.HeapPageId;
-import simpledb.storage.PageId;
+import simpledb.storage.*;
+import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class LockingTest extends TestUtil.CreateHeapFile {
   private PageId p0;
@@ -191,6 +197,56 @@ public class LockingTest extends TestUtil.CreateHeapFile {
     bp.getPage(tid2, p1, Permissions.READ_WRITE);
     bp.unsafeReleasePage(tid2, p1);
     bp.getPage(tid1, p1, Permissions.READ_WRITE);
+  }
+
+  @Test
+  public void concurrentAddNewPage() throws TransactionAbortedException, DbException, IOException {
+    HeapFile hf = createNonPageHeapFile();
+    // if you insert a new value later, HeapFile needs to add a new page
+    Runnable task = () -> {
+      try {
+        TransactionId tid = new TransactionId();
+        Database.getBufferPool().insertTuple(tid, hf.getId(), Utility.getHeapTuple(1, 2));
+        Database.getBufferPool().transactionComplete(tid);
+      } catch (DbException | IOException | TransactionAbortedException e) {
+        e.printStackTrace();
+      }
+    };
+    List<Thread> threads = new ArrayList<>(10);
+    for (int i = 0; i < 10; ++i) {
+      Thread t = new Thread(task);
+      threads.add(t);
+    }
+    for (int i = 0; i < 10; ++i) {
+      threads.get(i).start();
+    }
+    for (int i = 0; i < 10; ++i) {
+      try {
+        threads.get(i).join();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
+
+    // there should be 10 tuples in one page in the HeapFile
+    DbFileIterator it = hf.iterator(new TransactionId());
+    it.open();
+
+    int count = 0;
+    while(it.hasNext()) {
+      it.next();
+      count++;
+    }
+    assertEquals(10, count);
+  }
+
+  private HeapFile createNonPageHeapFile() throws IOException {
+    File f = File.createTempFile("empty", ".dat");
+    // touch the file
+    FileOutputStream fos = new FileOutputStream(f);
+    fos.write(new byte[0]);
+    fos.close();
+    return Utility.openHeapFile(2, f);
   }
 
   /**
