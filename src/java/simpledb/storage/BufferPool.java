@@ -6,6 +6,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 import sun.misc.Lock;
 
+import javax.swing.*;
 import javax.xml.crypto.Data;
 import java.io.*;
 
@@ -150,6 +151,86 @@ public class BufferPool {
 //
 //    }
 
+    public class DeadLockDetector {
+
+        // 等待图（wait-for graph）：节点为事务，t1-t2的边表示t1事务等待t2事务
+        private Map<TransactionId, Set<TransactionId>> graph = new HashMap<>();
+
+        // 入度
+        Map<TransactionId, Integer> inDegree = new HashMap<>();
+
+        /**
+         * 在等待图中加入边t1 -> t2
+         * @param t1
+         * @param t2
+         */
+        public void addWaitEdge(TransactionId t1, TransactionId t2) {
+            if (!graph.containsKey(t1)) {
+                graph.put(t1, new HashSet<>());
+            }
+            graph.get(t1).add(t2);
+            //inDegree.put(t1, inDegree.getOrDefault(t1, 0));
+            inDegree.put(t2, inDegree.getOrDefault(t2, 0) + 1);
+        }
+
+        /**
+         * 移除等待图中与t1等待的边
+         * @param t1
+         */
+        public void removeEdge(TransactionId t1) {
+            if (graph.containsKey(t1)) {
+                for (TransactionId transactionId : graph.get(t1)) {
+                    if (inDegree.containsKey(transactionId)) {
+                        inDegree.put(transactionId, inDegree.get(transactionId) - 1);
+                        if (inDegree.get(transactionId) == 0) {
+                            inDegree.remove(transactionId);
+                        }
+                    }
+                }
+            }
+
+            graph.remove(t1);
+        }
+
+        /**
+         * 检测是否存在死锁
+         * ：采用拓扑排序检测环
+         * @return 是否存在死锁
+         */
+        public boolean detect() {
+
+            Map<TransactionId, Integer> tempInDegree = new HashMap<>(inDegree);
+            // 记录入度为0的节点
+            Deque<TransactionId> queue = new LinkedList<>();
+            for (Map.Entry<TransactionId, Set<TransactionId>> entry : graph.entrySet()) {
+                TransactionId inTid = entry.getKey();
+                if (!tempInDegree.containsKey(inTid) || tempInDegree.get(inTid) == 0) {
+                    queue.offer(inTid);
+                }
+            }
+
+            while (queue.size() > 0) {
+                TransactionId t = queue.poll();
+                if (!graph.containsKey(t)) continue;
+                for (TransactionId adjTid: graph.get(t)) {
+                    int ind = tempInDegree.get(adjTid) - 1;
+                    tempInDegree.put(adjTid, ind);
+                    if (ind == 0) {
+                        queue.offer(adjTid);
+                    }
+                }
+            }
+
+            for (Integer ind : tempInDegree.values()) {
+                if (ind > 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    }
+
     public class PageLockManager {
 
         // 在页上加读锁的事务
@@ -159,6 +240,8 @@ public class BufferPool {
         private final Map<PageId, TransactionId> xLockMap = new HashMap<>();
 
         private final Map<TransactionId, Set<PageId>> transactionHoldPage = new HashMap<>();
+
+        private final DeadLockDetector deadLockDetector = new DeadLockDetector();
 
         public PageLockManager() {
 
@@ -170,10 +253,20 @@ public class BufferPool {
          * @param pid
          * @param perm
          */
-        public void lock(TransactionId tid, PageId pid, Permissions perm) {
+        public void lock(TransactionId tid, PageId pid, Permissions perm)
+                throws TransactionAbortedException {
 
             synchronized (this) {
                 while (!tryLock(tid, pid, perm)) {
+
+                    // 死锁检测
+                    if (deadLockDetector.detect()) {
+
+                        // 死锁，移除事务等待的边
+                        deadLockDetector.removeEdge(tid);
+                        throw new TransactionAbortedException();
+                    }
+
                     // 无法获取锁，阻塞
                     try {
                         this.wait();
@@ -212,27 +305,41 @@ public class BufferPool {
                 } else {
                     xLockMap.put(pid, tid);
                 }
+                // 获取锁成功，移除tid等待的边
+                this.deadLockDetector.removeEdge(tid);
                 return true;
             }
 
             if (xLockMap.containsKey(pid)) { // 页pid上加了排他锁
-                // 其他事务已经加了排他锁, 被阻塞(4)
-                if (!tid.equals(xLockMap.get(pid))) {
-                    return false;
+
+                if (tid.equals(xLockMap.get(pid))) {
+                    deadLockDetector.removeEdge(tid);
+                    return true;
                 }
-                return true;
+                // 在wait-for graph中加入边
+                deadLockDetector.addWaitEdge(tid, xLockMap.get(pid));
+                // 其他事务已经加了排他锁, 被阻塞(4)
+                return false;
             } else { // 页pid上加了共享锁
 
                 if (perm == Permissions.READ_ONLY) {
                     // 事务企图加共享锁，不会被阻塞(3)
                     sLockMap.get(pid).add(tid);
+                    deadLockDetector.removeEdge(tid);
                     return true;
                 } else if (sLockMap.get(pid).size() == 1 && sLockMap.get(pid).contains(tid)){
                     // tid企图加写锁，且目前持有读锁的事务只有tid，则锁升级(5)
                     sLockMap.remove(pid);
                     xLockMap.put(pid, tid);
+                    deadLockDetector.removeEdge(tid);
                     return true;
                 } else {
+                    // 在wait-for graph中加入边
+                    for (TransactionId sTid : sLockMap.get(pid)) {
+                        if (tid.equals(sTid)) continue;
+                        deadLockDetector.addWaitEdge(tid, sTid);
+                    }
+
                     return false;
                 }
             }
@@ -255,15 +362,17 @@ public class BufferPool {
                 if (transactionHoldPage.get(tid).size() == 0) {
                     transactionHoldPage.remove(tid);
                 }
+
                 this.notifyAll();
             }
         }
 
-        public boolean holdsLock(TransactionId tid, PageId pid) {
+        public synchronized boolean holdsLock(TransactionId tid, PageId pid) {
             return (xLockMap.containsKey(pid) && xLockMap.get(pid).equals(tid)) || (sLockMap.containsKey(pid) && sLockMap.get(pid).contains(tid));
         }
 
-        public PageId[] holdsPage(TransactionId tid) {
+        public synchronized PageId[] holdsPage(TransactionId tid) {
+            if (!transactionHoldPage.containsKey(tid)) return new PageId[0];
             return transactionHoldPage.get(tid).toArray(new PageId[0]);
         }
 
@@ -372,9 +481,9 @@ public class BufferPool {
                 }
                 cache.get(pid).markDirty(false, null); // 清除页dirty的标记
             }
-
             this.lockManager.unlock(tid, pid);
         }
+
     }
 
     /**

@@ -237,9 +237,9 @@ You will need to modify the <tt>evictPage</tt> method in <tt>BufferPool</tt>.
 In particular, it must never evict a dirty page. If your eviction policy prefers a dirty page
 for eviction, you will have to find a way to evict an alternative
 page. In the case where all pages in the buffer pool are dirty, you
-should throw a <tt>DbException</tt>. If your eviction policy evicts a clean page, be
-mindful of any locks transactions may already hold to the evicted page and handle them 
-appropriately in your implementation.
+should throw a <tt>DbException</tt>. ***If your eviction policy evicts a clean page, be***
+***mindful of any locks transactions may already hold to the evicted page and handle them*** 
+***appropriately in your implementation.***
 
 ***
 
@@ -299,10 +299,10 @@ understand why, we recommend reading about deadlocks in Ramakrishnan & Gehrke).
 You will need to detect this situation and throw a
 `TransactionAbortedException`.
 
-There are many possible ways to detect deadlock. A strawman example would be to
+There are many possible ways to *detect* deadlock. **A strawman example** would be to
 implement a simple timeout policy that aborts a transaction if it has not
 completed after a given period of time. For a real solution, you may implement
-cycle-detection in a dependency graph data structure as shown in lecture. In this
+**cycle-detection** in a dependency graph data structure as shown in lecture. In this
 scheme, you would  check for cycles in a dependency graph periodically or whenever
 you attempt to grant a new lock, and abort something if a cycle exists. After you have detected
 that a deadlock exists, you must decide how to improve the situation. Assume you
