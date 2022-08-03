@@ -105,7 +105,7 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		BTreePageId parentId = new BTreePageId(tableid, 1, BTreePageId.INTERNAL);
 		BTreeInternalPage parent = new BTreeInternalPage(parentId, 
 				BTreeInternalPage.createEmptyPageData(), keyField);
-				
+
 		// set the pointers
 		leftPage.setParentId(parentId);
 		
@@ -114,6 +114,7 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		dirtypages.put(leftPageId, leftPage);
 		dirtypages.put(parentId, parent);
 		BTreeInternalPage page = empty.splitInternalPage(tid, dirtypages, leftPage, field);
+
 		BTreeInternalPage otherPage;
 		assertEquals(1, parent.getNumEntries());
 		BTreeEntry parentEntry = parent.iterator().next();

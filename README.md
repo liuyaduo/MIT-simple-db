@@ -323,6 +323,18 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 2.尝试死锁预防策略。
 3.尝试引入更细粒度的锁：行级锁。
 
+### Lab 5: B+ Tree Index
+
+#### Exercise 1： Search
+
+#### Exercise 2： Insert-Splitting Pages
+
+#### Exercise 3： Delete-Redistributing pages
+
+#### Exercise 4： Delete-Merging pages
+
+#### 事务
+Next-Key Lock
 
 ---
 

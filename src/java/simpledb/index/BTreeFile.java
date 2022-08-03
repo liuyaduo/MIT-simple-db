@@ -1,6 +1,7 @@
 package simpledb.index;
 
 import java.io.*;
+import java.security.Permission;
 import java.util.*;
 
 import simpledb.common.Database;
@@ -188,7 +189,28 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+		if (pid.pgcateg() == BTreePageId.LEAF) {
+			Page page = getPage(tid, dirtypages, pid, perm);
+			return (BTreeLeafPage) page;
+		}
+
+		BTreeInternalPage page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+		Iterator<BTreeEntry> iterator = page.iterator();
+
+		BTreeEntry entry = null;
+		while (iterator.hasNext()) {
+			entry = iterator.next();
+			Field key = entry.getKey();
+			// 要查找的field为空或者小于等于当前key
+			if (f == null || f.compare(Op.LESS_THAN_OR_EQ, key)) {
+				// 递归找最左子节点
+				BTreePageId leftChild = entry.getLeftChild();
+				return findLeafPage(tid, dirtypages, leftChild, perm, f);
+			}
+		}
+
+		if (entry == null) return null;
+		return findLeafPage(tid, dirtypages, entry.getRightChild(), perm, f);
 	}
 	
 	/**
@@ -239,8 +261,68 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
-		
+
+		BTreeLeafPage emptyPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+
+		// 将page中一半的key移动到新创建的页
+		BTreeLeafPage insertPage = emptyPage;
+		Deque<Tuple> stack = new LinkedList<>();
+		int moveNumTuples = page.getNumTuples() / 2;
+		Iterator<Tuple> tupleIterator = page.reverseIterator();
+		while (tupleIterator.hasNext() && moveNumTuples > 0) {
+			Tuple next = tupleIterator.next();
+			stack.offerLast(next);
+			moveNumTuples--;
+		}
+		/**
+		if (tupleIterator.hasNext()) {
+			Tuple next = tupleIterator.next();
+			Field keyField = next.getField(page.keyField);
+			if (field.compare(Op.LESS_THAN_OR_EQ, keyField)) {
+				if (page.getNumTuples() % 2 != 0)
+					stack.offerLast(next);
+				insertPage = page;
+			}
+		}
+		*/
+
+		Field copyField = stack.getLast().getField(page.keyField);
+
+		while (stack.size() > 0) {
+			Tuple tuple = stack.pollLast();
+			page.deleteTuple(tuple);
+			emptyPage.insertTuple(tuple);
+		}
+
+		dirtypages.put(page.getId(), page);
+		dirtypages.put(emptyPage.getId(), emptyPage);
+
+		BTreeInternalPage insertInternalPage = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), copyField);
+
+		// 父节点插入copy entry
+		BTreeEntry copyEntry = new BTreeEntry(copyField, page.getId(), emptyPage.getId());
+		insertInternalPage.insertEntry(copyEntry);
+
+		dirtypages.put(insertInternalPage.getId(), insertInternalPage);
+
+		// 更新页的父节点
+		updateParentPointers(tid, dirtypages, insertInternalPage);
+
+		// 更新兄弟指针
+		BTreePageId oriRightSiblingId = page.getRightSiblingId();
+		page.setRightSiblingId(emptyPage.getId());
+		emptyPage.setLeftSiblingId(page.getId());
+		emptyPage.setRightSiblingId(oriRightSiblingId);
+		if (oriRightSiblingId != null) {
+			BTreeLeafPage oriRightPage = (BTreeLeafPage) getPage(tid, dirtypages, oriRightSiblingId, Permissions.READ_WRITE);
+			oriRightPage.setLeftSiblingId(emptyPage.getId());
+			dirtypages.put(oriRightSiblingId, oriRightPage);
+		}
+
+		if (field.compare(Op.LESS_THAN_OR_EQ, copyField)) {
+			return page;
+		}
+		return emptyPage;
 	}
 	
 	/**
@@ -277,7 +359,53 @@ public class BTreeFile implements DbFile {
 		// the parent pointers of all the children moving to the new page.  updateParentPointers()
 		// will be useful here.  Return the page into which an entry with the given key field
 		// should be inserted.
-		return null;
+
+		BTreeInternalPage emptyPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+
+		// 将一半的entry迁移到新页
+		Deque<BTreeEntry> stack = new LinkedList<>();
+		int moveNumEntrys = page.getNumEntries() / 2;
+		Iterator<BTreeEntry> entryIterator = page.reverseIterator();
+		while (entryIterator.hasNext() && moveNumEntrys > 0) {
+			BTreeEntry next = entryIterator.next();
+			stack.offerLast(next);
+			moveNumEntrys--;
+		}
+
+		while (stack.size() > 0) {
+			BTreeEntry entry = stack.pollLast();
+			page.deleteKeyAndRightChild(entry);
+			emptyPage.insertEntry(entry);
+		}
+
+		// 得到要push的entry，并从原page移除
+		BTreeEntry pushEntry = entryIterator.next();
+		page.deleteKeyAndRightChild(pushEntry);
+
+		dirtypages.put(page.getId(), page);
+		dirtypages.put(emptyPage.getId(), emptyPage);
+		// 更新左右孩子指针
+		pushEntry.setLeftChild(page.getId());
+		pushEntry.setRightChild(emptyPage.getId());
+		// 更新父指针
+		updateParentPointers(tid, dirtypages, emptyPage);
+		updateParentPointers(tid, dirtypages, page);
+
+		BTreeInternalPage parentWithEmptySlots = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), pushEntry.getKey());
+
+		// push entry
+		parentWithEmptySlots.insertEntry(pushEntry);
+
+		// 加入脏页
+		dirtypages.put(parentWithEmptySlots.getId(), parentWithEmptySlots);
+
+		updateParentPointers(tid, dirtypages, parentWithEmptySlots);
+
+		// 更新field要插入的页
+		if (field.compare(Op.LESS_THAN_OR_EQ, pushEntry.getKey())) {
+			return page;
+		}
+		return emptyPage;
 	}
 	
 	/**

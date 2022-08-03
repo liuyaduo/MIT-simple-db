@@ -505,7 +505,7 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
-        HeapFile dbFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        DbFile dbFile = (DbFile) Database.getCatalog().getDatabaseFile(tableId);
         List<Page> dirtyPages = dbFile.insertTuple(tid, t);
         for (Page dirtyPage : dirtyPages) {
             dirtyPage.markDirty(true, tid);
