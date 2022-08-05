@@ -203,6 +203,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
   public void concurrentAddNewPage() throws TransactionAbortedException, DbException, IOException {
     HeapFile hf = createNonPageHeapFile();
     // if you insert a new value later, HeapFile needs to add a new page
+    //System.out.println("****************start******************");
     Runnable task = () -> {
       try {
         TransactionId tid = new TransactionId();
@@ -212,15 +213,16 @@ public class LockingTest extends TestUtil.CreateHeapFile {
         e.printStackTrace();
       }
     };
-    List<Thread> threads = new ArrayList<>(10);
-    for (int i = 0; i < 10; ++i) {
+    int threadNum = 1000;
+    List<Thread> threads = new ArrayList<>(threadNum);
+    for (int i = 0; i < threadNum; ++i) {
       Thread t = new Thread(task);
       threads.add(t);
     }
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < threadNum; ++i) {
       threads.get(i).start();
     }
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < threadNum; ++i) {
       try {
         threads.get(i).join();
       } catch (InterruptedException e) {
@@ -228,7 +230,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
       }
     }
 
-    // there should be 10 tuples in one page in the HeapFile
+    // there should be threadNum tuples in one page in the HeapFile
     DbFileIterator it = hf.iterator(new TransactionId());
     it.open();
 
@@ -237,7 +239,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
       it.next();
       count++;
     }
-    assertEquals(10, count);
+    assertEquals(threadNum, count);
   }
 
   private HeapFile createNonPageHeapFile() throws IOException {

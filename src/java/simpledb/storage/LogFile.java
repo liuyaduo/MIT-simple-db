@@ -1,6 +1,7 @@
 
 package simpledb.storage;
 
+import com.sun.xml.internal.ws.streaming.TidyXMLStreamReader;
 import simpledb.common.Database;
 import simpledb.transaction.TransactionId;
 import simpledb.common.Debug;
@@ -107,7 +108,7 @@ public class LogFile {
         @param f The log file's name
     */
     public LogFile(File f) throws IOException {
-	this.logFile = f;
+	    this.logFile = f;
         raf = new RandomAccessFile(f, "rw");
         recoveryUndecided = true;
 
@@ -460,6 +461,48 @@ public class LogFile {
             synchronized(this) {
                 preAppend();
                 // some code goes here
+                Long first = tidToFirstLogRecord.get(tid.getId());
+
+                Deque<Page> undoList = new LinkedList<>();
+                long curOffset = raf.getFilePointer();
+                raf.seek(first);
+                while (true) {
+                    try {
+                        int cpType = raf.readInt();
+                        long cpTid = raf.readLong();
+                        switch (cpType) {
+                            case UPDATE_RECORD:
+                                Page before = readPageData(raf);
+                                if (cpTid == tid.getId())
+                                    undoList.offerLast(before);
+                                Page after = readPageData(raf);
+                                break;
+                            case CHECKPOINT_RECORD:
+                                int numTransactions = raf.readInt();
+                                while (numTransactions-- > 0) {
+                                    raf.readLong();
+                                    raf.readLong();
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                        raf.readLong();
+                    } catch (EOFException e) {
+                        //e.printStackTrace();
+                        break;
+                    }
+                }
+
+                // Return the file pointer to its original position
+                raf.seek(curOffset);
+                int size = undoList.size();
+                for (int i = 0; i < size; i++) {
+                    Page page = undoList.pollLast();
+                    Database.getBufferPool().discardPage(page.getId());
+                    Database.getCatalog().getDatabaseFile(page.getId().getTableId()).writePage(page);
+                }
+                tidToFirstLogRecord.remove(tid.getId());
             }
         }
     }
@@ -487,6 +530,82 @@ public class LogFile {
             synchronized (this) {
                 recoveryUndecided = false;
                 // some code goes here
+                long curOffset = raf.getFilePointer();
+                raf.seek(0);
+                Long lastCheckPoint = raf.readLong();
+
+                HashMap<Long, List<Page>> undoMap = new HashMap<>();
+                HashMap<Long, List<Page>> redoMap = new HashMap<>();
+                Set<Long> committedTid = new HashSet<>();  // loser transaction: checkPoint之前的事务之后没提交，checkPoint开始
+
+                boolean beforeCheckPoint = true;
+                while (true) {
+                    try {
+                        int cpType = raf.readInt();
+                        long cpTid = raf.readLong();
+                        switch (cpType) {
+                            case UPDATE_RECORD:
+                                Page before = readPageData(raf);
+                                Page after = readPageData(raf);
+                                // before image用于undo
+                                if (!undoMap.containsKey(cpTid)) undoMap.put(cpTid, new ArrayList<>());
+                                undoMap.get(cpTid).add(before);
+                                // after image用于redo
+                                if (!redoMap.containsKey(cpTid)) redoMap.put(cpTid, new ArrayList<>());
+                                redoMap.get(cpTid).add(after);
+                                break;
+                            case CHECKPOINT_RECORD:
+                                int numTransactions = raf.readInt();
+                                while (numTransactions-- > 0) {
+                                    raf.readLong();
+                                    raf.readLong();
+                                }
+                                break;
+                            case COMMIT_RECORD:
+                                // loser Transaction记录的事务
+                                undoMap.remove(cpTid);
+                                // checkPoint之后提交的事务
+                                if (!beforeCheckPoint) {
+                                    committedTid.add(cpTid);
+                                }
+                            case ABORT_RECORD:
+                                // 回滚的事务不redo也不undo
+                                undoMap.remove(cpTid);
+                            default:
+                                break;
+                        }
+                        long offset = raf.readLong();
+                        if (offset == lastCheckPoint) {
+                            beforeCheckPoint = false;
+                        }
+                    } catch (EOFException e) {
+                        //e.printStackTrace();
+                        break;
+                    }
+                }
+
+                // Return the file pointer to its original position
+                raf.seek(curOffset);
+
+                // undo
+                for (Map.Entry<Long, List<Page>> undoEntry : undoMap.entrySet()) {
+                    List<Page> undoList = undoEntry.getValue();
+                    int size = undoList.size();
+                    for (int i = size - 1; i >= 0; i--) {
+                        Page page = undoList.get(i);
+                        Database.getCatalog().getDatabaseFile(page.getId().getTableId()).writePage(page);
+                    }
+                }
+
+
+                // redo
+                for (Long comTid : committedTid) {
+                    if (redoMap.containsKey(comTid)) {
+                        for (Page page : redoMap.get(comTid)) {
+                            Database.getCatalog().getDatabaseFile(page.getId().getTableId()).writePage(page);
+                        }
+                    }
+                }
             }
          }
     }

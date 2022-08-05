@@ -124,7 +124,7 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
-    public List<Page> insertTuple(TransactionId tid, Tuple t)
+    public synchronized List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
@@ -138,9 +138,11 @@ public class HeapFile implements DbFile {
         // 扫描含有空slot的页
         for (int i = 0; i < numPages(); i++) {
             HeapPageId pageId = new HeapPageId(getId(), i);
+            //System.out.println(Thread.currentThread() + ": " + tid.getId() + "获取页" + pageId + "的读锁");
             HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
             if (page.getNumEmptySlots() != 0) {
                 // 有空的槽位，升级读锁为写锁
+                //System.out.println(Thread.currentThread() + ": " +tid.getId() + "升级页" + pageId + "的读锁为写锁");
                 page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
                 page.insertTuple(t);
                 pageList.add(page);
@@ -149,15 +151,16 @@ public class HeapFile implements DbFile {
                 // 没有空的槽位，释放读锁
                 Database.getBufferPool().unsafeReleasePage(tid, pageId);
             }
-
         }
 
         // 没有包含空slot的页，需要创建新的页,（将空页刷到磁盘，相当于给文件增加一页的空间），然后从BufferPool获取页，将tuple插入页返回（此时为脏页）
         HeapPageId pageId = new HeapPageId(getId(), numPages());
         HeapPage heapPage = new HeapPage(pageId, HeapPage.createEmptyPageData());
+        //System.out.println(Thread.currentThread() + ": " +tid.getId() + "创建新的页" + pageId);
         writePage(heapPage); // 只需将空页刷到磁盘，不需要将加入tuple的页（脏页）刷到磁盘
 
         // 脏页
+        //System.out.println(Thread.currentThread() + ": " +tid.getId() + "获取页" + pageId + "的写锁");
         HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
         page.insertTuple(t);
         pageList.add(page);

@@ -376,6 +376,10 @@ public class BufferPool {
             return transactionHoldPage.get(tid).toArray(new PageId[0]);
         }
 
+        public synchronized boolean holdsXPage(TransactionId tid, PageId pid) {
+            return xLockMap.containsKey(pid) && xLockMap.get(pid).equals(tid);
+        }
+
     }
 
     /**
@@ -464,14 +468,23 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         PageId[] pageIds = this.lockManager.holdsPage(tid);
-        TransactionId dirtyTid;
         // 释放事务持有的锁,并提交或回滚对应的页
         for (PageId pid: pageIds) {
-            if (cache.containsKey(pid) && ((dirtyTid = cache.get(pid).isDirty()) != null) && dirtyTid.equals(tid)) {
+            Page p = cache.get(pid);
+            // https://www.wmc1999.top/posts/mit-6.830-lab4-simpledb-transactions/
+            // 如果事务是在insertTuple/deleteTuple执行完之后再abort，
+            // 那么由于no steal，abort时该事务的dirty page一定在BufferPool中被标记为dirty了，
+            // 通过遍历BufferPool中的page，并将dirty page读回是可行的；
+            // 但如果在执行过程中就abort了，那么BufferPool中被事务获取的page还没有标记dirty，
+            // 我们需要通过PageLockManager来查看哪些page被加了exclusive锁，并把这些page从disk读回。
+            if (p != null && this.lockManager.holdsXPage(tid, pid)) {
                 if (commit) {
                     // 提交：将页刷到磁盘
                     try {
                         flushPage(pid);
+                        // use current page contents as the before-image
+                        // for the next transaction that modifies this page.
+                        p.setBeforeImage();
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -479,7 +492,7 @@ public class BufferPool {
                     // 回滚：将页恢复到磁盘上页的状态
                     cache.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
                 }
-                cache.get(pid).markDirty(false, null); // 清除页dirty的标记
+                p.markDirty(false, null); // 清除页dirty的标记
             }
             this.lockManager.unlock(tid, pid);
         }
@@ -551,12 +564,12 @@ public class BufferPool {
 
         // LinkedHashMap迭代器循坏内，调用cache.get等方法会改变容器结构，引起并发修改异常
         for (Map.Entry<PageId, Page> e : cache.entrySet()) {
-            PageId pid = e.getKey();
             Page page = e.getValue();
-            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
-            page.markDirty(false, null);
+            //Page page = e.getValue();
+            //Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
+            //page.markDirty(false, null);
+            flushPage(page);
         }
-
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -580,10 +593,37 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+
         if (cache.containsKey(pid)) {
-            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(cache.get(pid));
-            cache.get(pid).markDirty(false, null);
+            // append an update record to the log, with
+            // a before-image and after-image.
+            Page p = cache.get(pid);
+            TransactionId dirtier = p.isDirty();
+            if (dirtier != null){
+                Database.getLogFile().logWrite(dirtier, p.getBeforeImage(), p);
+                Database.getLogFile().force();
+            }
+            // 将脏页刷到磁盘
+            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(p);
+            p.markDirty(false, null);
         }
+    }
+
+    private synchronized void flushPage(Page page) throws IOException {
+        // some code goes here
+        // not necessary for lab1
+
+        // append an update record to the log, with
+        // a before-image and after-image.
+        TransactionId dirtier = page.isDirty();
+        if (dirtier != null){
+            Database.getLogFile().logWrite(dirtier, page.getBeforeImage(), page);
+            Database.getLogFile().force();
+        }
+        // 将脏页刷到磁盘
+        PageId pid = page.getId();
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
+        page.markDirty(false, null);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -612,8 +652,9 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException, IOException {
         // some code goes here
         // not necessary for lab1
-
-        for (Map.Entry<PageId, Page> oldestPage : cache.entrySet()) {
+        Iterator<Map.Entry<PageId, Page>> iterator = cache.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<PageId, Page> oldestPage = iterator.next();
             Page page = oldestPage.getValue();
 
             // 脏页不能被淘汰
@@ -621,10 +662,11 @@ public class BufferPool {
                 continue;
             }
 
-            PageId pageId = oldestPage.getKey();
-            flushPage(pageId);
+            //PageId pageId = oldestPage.getKey();
+            // 只淘汰干净的页，不需要刷盘（no steal）
+            //flushPage(pageId);
             //System.out.println("淘汰页：" + oldestPage.getKey());
-            cache.remove(oldestPage.getKey());
+            iterator.remove();
             pagesNum--;
             return;
         }
