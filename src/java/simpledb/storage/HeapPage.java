@@ -73,8 +73,7 @@ public class HeapPage implements Page {
     */
     private int getNumTuples() {        
         // some code goes here
-
-        return (int) Math.floor((BufferPool.getPageSize() * 8.0) / (this.td.getSize() * 8 + 1));
+        return 0;
 
     }
 
@@ -85,7 +84,7 @@ public class HeapPage implements Page {
     private int getHeaderSize() {        
         
         // some code goes here
-        return (int) Math.ceil(getNumTuples() / 8.0);
+        return 0;
                  
     }
     
@@ -118,8 +117,8 @@ public class HeapPage implements Page {
      * @return the PageId associated with this page.
      */
     public HeapPageId getId() {
-        // some code goes here
-        return this.pid;
+    // some code goes here
+    throw new UnsupportedOperationException("implement this");
     }
 
     /**
@@ -128,7 +127,6 @@ public class HeapPage implements Page {
     private Tuple readNextTuple(DataInputStream dis, int slotId) throws NoSuchElementException {
         // if associated bit is not set, read forward to the next tuple, and
         // return null.
-
         if (!isSlotUsed(slotId)) {
             for (int i=0; i<td.getSize(); i++) {
                 try {
@@ -290,38 +288,15 @@ public class HeapPage implements Page {
      */
     public int getNumEmptySlots() {
         // some code goes here
-        int numValidSlots = 0;
-        for (int i = 0; i < header.length; i++) {
-            // byte转无符号整型需要先& 0xff
-            numValidSlots += getOneNumber((int) header[i] & 0xff);
-        }
-        return numSlots - numValidSlots;
-    }
-
-    /**
-     *
-     * @return
-     */
-    private int getOneNumber(int n) {
-        int num = 0;
-        while (n != 0) {
-            n = n & (n - 1);
-            num ++;
-        }
-        return num;
+        return 0;
     }
 
     /**
      * Returns true if associated slot on this page is filled.
-     * 注意Jvm采用大端模式存放多字节的数据（数据的高字节放在低地址）
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        // 第i个slot对应的bit处于的几个header
-        int headerIndex = (int) Math.floor(i / 8.0);
-        // header 内的第几个bit
-        int bitIndex = i % 8;
-        return (header[headerIndex] & (1 << bitIndex)) != 0;
+        return false;
     }
 
     /**
@@ -333,50 +308,12 @@ public class HeapPage implements Page {
     }
 
     /**
-     * HeapPage迭代器
-     */
-    private class Iter implements Iterator<Tuple> {
-
-        private int cursor; // index of next element to return
-
-        Iter() {}
-
-        @Override
-        public boolean hasNext() {
-            int i = cursor;
-            while (i < numSlots) {
-                if (isSlotUsed(i)) {
-                    return true;
-                }
-                i++;
-            }
-            return false;
-        }
-
-        @Override
-        public Tuple next() {
-            int i = cursor;
-            while (i < numSlots) {
-                if (isSlotUsed(i)) {
-                    break;
-                }
-                i++;
-            }
-            if (i >= numSlots) {
-                throw new NoSuchElementException("");
-            }
-            cursor = i + 1;
-            return tuples[i];
-        }
-    }
-
-    /**
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)
      * (note that this iterator shouldn't return tuples in empty slots!)
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        return new Iter();
+        return null;
     }
 
 }

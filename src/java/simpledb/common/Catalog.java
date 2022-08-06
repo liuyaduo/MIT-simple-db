@@ -24,47 +24,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Catalog {
 
     /**
-     * Table类封装表名、表对应的数据库文件、表主键
-     */
-    private class Table {
-        private DbFile file;
-        private String name;
-        private String pKeyField;
-
-        Table(DbFile file, String name, String pKeyField) {
-            this.file = file;
-            this.name = name;
-            this.pKeyField = pKeyField;
-        }
-
-        public DbFile getFile() {
-            return file;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getpKeyField() {
-            return pKeyField;
-        }
-    }
-
-    // tableId: Table
-    private Map<Integer, Table> tables;
-
-    // tableName: tableId
-    private Map<String, Integer> tableIds;
-
-    /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
         // some code goes here
-        tables = new ConcurrentHashMap<>();
-        tableIds = new ConcurrentHashMap<>();
-
     }
 
     /**
@@ -78,11 +42,6 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
-        int tableId = file.getId();
-        Table table = new Table(file, name, pkeyField);
-        tables.put(tableId, table);
-        tableIds.put(name, tableId);
-
     }
 
     public void addTable(DbFile file, String name) {
@@ -106,10 +65,7 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        if (name == null || !tableIds.containsKey(name)) {
-            throw new NoSuchElementException("the table doesn't exist!");
-        }
-        return tableIds.get(name);
+        return 0;
     }
 
     /**
@@ -120,10 +76,7 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        if (!tables.containsKey(tableid)) {
-            throw new NoSuchElementException("the table doesn't exist");
-        }
-        return tables.get(tableid).getFile().getTupleDesc();
+        return null;
     }
 
     /**
@@ -134,39 +87,31 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        if (!tables.containsKey(tableid)) {
-            throw new NoSuchElementException("the table doesn't exist");
-        }
-        return tables.get(tableid).getFile();
+        return null;
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        return tables.get(tableid).getpKeyField();
+        return null;
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return tables.keySet().iterator();
+        return null;
     }
 
     public String getTableName(int id) {
         // some code goes here
-        return tables.get(id).getName();
+        return null;
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
         // some code goes here
-        tables.clear();
-        tableIds.clear();
     }
     
     /**
      * Reads the schema from a file and creates the appropriate tables in the database.
-     * catalogFile文件格式
-     * name1 (属性名 类型  pk(可选，表示该属性为主键), ...)
-     * name2 (属性名 类型, ...)
      * @param catalogFile
      */
     public void loadSchema(String catalogFile) {
