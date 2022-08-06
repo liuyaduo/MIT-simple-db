@@ -291,13 +291,18 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 
 #### Exercise2:
 
+insertTuple中当没有空闲slot的页时，会创建新的页，此时存在竞态条件，可以对insertTuple加锁来解决。
+
 #### Exercise3:
-实现no-steal：只有提交时才将脏页刷到磁盘。\
+实现**no-steal**：不能将未提交的事务修改的页刷到磁盘。（可以确保数据库不会处于一个中间状态，需要较大的内存来缓存未提交的修改，保证原子性）\
 主要是修改**evictPage**方法，在淘汰页时，脏页不能被淘汰，需要切换到没有被修改的页淘汰。
+
 #### Exercise4:
 实现**transactionComplete()**方法：对应两阶段锁协议的收缩阶段，实现事务的提交/回滚，并释放事务持有的锁。\
-提交：将事务修改的脏页刷到磁盘\
+提交：将事务修改的脏页刷到磁盘   --**force**（提交时将事务修改的所有脏页刷到磁盘，保证持久性。可能一次性写大量的页，影响性能）\
 回滚：将脏页恢复成磁盘的中的数据，即修改前的状态。
+
+现代的数据库一般都会采用steal/no force buffer管理策略来保证性能，并结合undo、redo保证原子性和持久性。
 
 #### Exercise5:
 实现死锁的检测和处理。\
@@ -308,6 +313,15 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 2.死锁处理
 当检测到环时，回滚事务。此时涉及到回滚事务的选择，存在多种策略，比如锁住的对象个数，年龄，已经回滚的次数（可能存在饿死）。
 
+**修复BUG：**transactionComplete(TransactionId tid, boolean commit)函数；**修复之后此时可以通过BTreeTest**。
+
+```
+如果事务是在insertTuple/deleteTuple如果在执行过程中就abort了，那么BufferPool中被事务获取的page还没有标记dirty，然而此时页可能已经发生了改变。所以不能通过页isDirty来判断是否回滚。
+需要通过PageLockManager来查看哪些page被加了exclusive锁，并把这些page从disk读回。
+```
+
+
+
 除了上述的死锁检测和处理之外，还可以进行死锁预防，通过**wait-die**或**wound-die**。\
 
 目前仅采取死锁检测和处理，死锁检测采用检测环的方法。\
@@ -317,7 +331,6 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 死锁处理：在检测到死锁时，需要移除等待的边，并抛出`TransactionAbortedException`异常，事务的调用者捕捉到异常后回滚。 \
 目前在回滚时只回滚检测到死锁的事务，即环中最后加入的边对应阻塞的事务。\
 
-
 **后续可以尝试：**\
 1.将死锁检测改为周期性检测；在事务回滚时尝试多种事务选择策略。
 2.尝试死锁预防策略。
@@ -325,16 +338,147 @@ public static class CombinationIter<E> implements Iterator<Set<E>> {
 
 ### Lab 5: B+ Tree Index
 
+lab实现了一个B+Tree聚簇索引，用于快速查找和range scan。SimpleDB提供了B+树的框架，以及一些必要的函数，我们需要自己实现树搜索，分裂page，在page间重新分配tuples，合并page的方法。
+
+BTreeFile包含四种不同的page：
+
+首先是`BTreeInternalPage`和`BTreeLeafPage`，`BTreePage`接口包含了对这两种page的抽象；`BTreeHeaderPage`用于追踪哪些page正在被使用；`BTreeRootPtrPage`存在于每个BTreeFile的头部，指向RootPage（是一种`BTreeInternalPage`）和第一个HeaderPage。
+
+如果想要允许多线程同时访问B+Tree，要防止以下两种问题：
+
+- 多个thread同时修改一个node的内容；
+- 一个thread正在traversing tree，其他线程在merge/split node。
+
+simpledb在处理b+树的并发问题时采用如下的加锁策略：
+
+- 对于scan，从root page到leaf page，加读锁；
+- 对于insert，从root page开始的所有internal page都加读锁，Leaf page加写锁，如果涉及到split，就对sibling和parent加写锁，并且继续递归向上加写锁；
+- 对于delete，直接对leaf page加写锁，如果涉及到steal/merge，再对sibling和parent加写锁，并且继续递归向上加写锁处理。
+
+为了实现更高的并发度，可以参考B-link树。
+
 #### Exercise 1： Search
+
+实现B+树的查找操作，根据给定的Key，返回树中它在的那个叶子节点。
+
+顺着根节点往下递归的找就是了，和二叉查找树/红黑树很相似，仅仅在于B+树有更多的叉，需要在一个节点当中遍历or二分查找刚好满足的Key及其Pointer。（由于simpledb在节点查找只支持迭代器，因此暂不支持二分查找）
+
+顺着树根和树的内部节点一路递归下去，返回最终的（包含Key或者Key应该在的那个左）叶子节点。需要注意在getPage时，对于中间节点需要加读锁，叶节点加写锁。
 
 #### Exercise 2： Insert-Splitting Pages
 
+此处是实现插入操作的核心部分页分裂。如果是分裂叶子节点，需要将分裂之后的右侧子节点的第一个元素拷贝到父节点，并将父节点的左指针设置为左子节点，右指针设置为右子节点。如果是分裂中间节点需要需要将右侧子节点的第一个元素移除并拷贝到父节点。
+
+在向父节点插入元素时可能引起父节点的分类，因此需要递归处理。
+
+除此之外需要注意更新父指针，因为每个节点都存了对应父节点的指针，因此当创建新页之后需要更新父指针。
+
+
+
+<p align="center"> <img width=500 src="splitting_leaf.png"><br> <img width=500
+src="splitting_internal.png"><br> <i>Figure 2: Splitting pages</i> </p>
+
+
+
+
+
+删除操作在删除之后节点中的元素数量小于最大数量的一半需处理两种情况：
+
+1.重新分配两个页中的元素。
+
+2.和另一个页小于最大数量一半的页合并
+
+exercise3处理第一种，exercise4处理第2种。
+
 #### Exercise 3： Delete-Redistributing pages
+
+重新分配页种的元素分为1.分配叶子之间的元素，2.分配中间节点之间的元素
+
+<p align="center"> <img width=500 src="redist_leaf.png"><br> <img width=500
+src="redist_internal.png"><br> <i>Figure 3: Redistributing pages</i> </p>
+
+
 
 #### Exercise 4： Delete-Merging pages
 
+
+
+<p align="center"> <img width=500 src="merging_leaf.png"><br> <img width=500
+src="merging_internal.png"><br> <i>Figure 4: Merging pages</i> </p>
+
+
+
 #### 事务
+
 Next-Key Lock
+
+### Lab 6：Rollback and Recovery
+
+目前的buffer 管理只实现了no-steal/force 策略，假设在提交的过程中数据库不会crash就可以保证事务的ACD特性。
+
+```
+Note that these three points mean that you do not need to implement log-based recovery in this lab, since you will never need to undo any work (you never evict dirty pages) and you will never need to redo any work (you force updates on commit and will not crash during commit processing).
+```
+
+此处实现的日志系统支持undo、redo，可用于处理更灵活的buffer 管理策略。
+
+为了确保DBMS能够从failure中恢复，在事务的正常执行过程中需要做的事：
+
+在事务执行中，写入WAL。仅当事务对应的log都被持久化之后，才能提交事务；当事务abort后，可以利用WAL log回滚。定期向持久化存储写入checkpoint，记录当前活跃的transactions和该事务第一次记录的位置。
+
+WAL包含redo和undo信息：
+
+- redo log必须是physical的，如对DB内某数据结构的修改，因为crash时，DBMS可能不满足“action consistent”，一些操作可能包含一系列非原子操作，例如插入一条数据，index中插入了，但是HeapFile中还没有。
+- undo log必须时logical的，如delete/insert一条DB中的Tuple，因为当我们undo时，状态可能和写入该log时不一致了。
+
+Simple DB目前实现的redo和undo全部是物理的。当一个事务更新过一个page后，对应的UPDATE日志record，会将记录的修改前的page内容作为before-image，将修改后的当前page内容作为after-image。之后，可以使用before-image在abort时回滚，或者在Recovery期间撤销loser transactions；使用after-image在Recovery期间redo winner transactions。
+
+需要对原始代码做几处改变：
+
+1.  在`BufferPool.flushPage()`中`writePage(p)`之前插入如下代码，保证WAL即刷盘之前先写日志。
+
+```
+// append an update record to the log, with 
+// a before-image and after-image.
+TransactionId dirtier = p.isDirty();
+if (dirtier != null){
+Database.getLogFile().logWrite(dirtier, p.getBeforeImage(), p);
+Database.getLogFile().force();
+}
+```
+
+2. 在`BufferPool.transactionComplete()`中`flushPage()`之后加入`p.setBeforeImage()`。用于在事务的更新提交后将该页的before-image更新。
+
+```
+// use current page contents as the before-image
+// for the next transaction that modifies this page.
+p.setBeforeImage();
+```
+
+
+
+#### Exercise1: Rollback
+
+实现事务的回滚，undo事务对数据库的修改。
+
+1.从事务的第一个记录开始，保存所有的UPDATE记录的before-image。
+
+2.然后反向遍历所有的before-image，并写回磁盘，即可完成undo
+
+#### Exercise2: Recovery
+
+由于日志实现了CheckPoint，因此checkpoint之前的记录的修改已经写到磁盘。
+
+此时需要对checkpoint之后的未提交的事务进行redo，对loser事务即checkpoint之前更新的未提交以及checkpoint之后开始但未提交的事务undo。
+
+需要注意的是abort的事务既不undo也不redo。因为checkpoint之后的abort已经在crash之前回滚。
+
+1. 从日志开始得到checkpoint记录的位置。
+2. 使用哈希表保存每个事务对应的更新记录中的before-image用于undo，after-image用于redo
+3. 在到达checkPoint之后记录提交的事务，并将事务即其要undo的before-image删除
+4. 最终记录的undo中事务为loser事务，需要回滚，redo中的事务需要redo。
+
+
 
 ---
 
