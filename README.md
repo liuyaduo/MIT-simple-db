@@ -1,6 +1,6 @@
 ## Lab
 
-![](D:\work\workspace\MIT-simple-db\test通过.jpg)
+![](https://github.com/liuyaduo/MIT-simple-db/blob/dev/test%E9%80%9A%E8%BF%87.jpg)
 
 ### Lab1
 
