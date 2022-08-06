@@ -1,6 +1,6 @@
 ## Lab
 
-![](https://github.com/liuyaduo/MIT-simple-db/blob/dev/test%E9%80%9A%E8%BF%87.jpg)
+![](https://github.com/liuyaduo/MIT-simple-db/blob/dev/test.jpg)
 
 ### Lab1
 
