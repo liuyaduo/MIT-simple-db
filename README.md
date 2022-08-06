@@ -1,5 +1,9 @@
 ## Lab
+
+![](D:\work\workspace\MIT-simple-db\test通过.jpg)
+
 ### Lab1
+
 #### Exercise 1： Fields and Tuples
 schema: TupleDesc类 \
 schema包含多个TDItem（属性类型（Type），属性名） \
